@@ -215,6 +215,23 @@ Replace `YOUR-URL` with the URL from Step 5.
 
 ---
 
+## MQTT water data ingestion (24×7)
+
+This service subscribes to AWS IoT MQTT topics (`+/water_meter/#`) on startup and writes water telemetry to DynamoDB.
+
+After deploy, check logs in Beanstalk → **Logs** → look for:
+
+```
+MQTT ingestion subscriber active on +/water_meter/#
+Subscribed to MQTT topic filter +/water_meter/#
+```
+
+Health check: `/actuator/health` should show `"mqtt":{"status":"UP"}` when connected.
+
+**Important:** Only one service should subscribe to MQTT. `water_meter_service` Lambda has MQTT disabled (`DEVICE_MQTT_INGESTION_ENABLED=false`). Redeploy that Lambda stack if it was still subscribing.
+
+---
+
 ## Day to day (after setup)
 
 Whenever you change code:
