@@ -46,8 +46,9 @@ jobs:
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
         with:
-          aws_region: ${{ env.AWS_REGION }}
+          region: ${{ env.AWS_REGION }}
           application_name: ${{ env.EB_APPLICATION }}
           environment_name: ${{ env.EB_ENVIRONMENT }}
           version_label: ${{ github.sha }}
           deployment_package: deploy.zip
+          wait_for_deployment: true

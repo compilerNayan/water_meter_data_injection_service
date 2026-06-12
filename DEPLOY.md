@@ -236,6 +236,7 @@ GitHub rebuilds and redeploys automatically. Wait for the green check in **Actio
 | GitHub Action: **Could not assume role with OIDC** | Step 10 trust policy must say exactly `compilerNayan/water_meter_data_injection_service` |
 | GitHub Action: **No Environment found** | Beanstalk environment name must be `water-meter-data-injection-env` (Step 4) |
 | GitHub Action: **Access Denied** | Role needs `AdministratorAccess-AWSElasticBeanstalk` (Step 9) |
+| GitHub Action: **Region not specified** | Fixed in workflow — push latest code (uses `region`, not `aws_region`) |
 | Browser shows old sample app | Wait for deploy to finish; in Beanstalk console check **Health** is green |
 | `/actuator/health` shows dynamodb **DOWN** | Do Part 2 again (Step 7) — EC2 role missing DynamoDB policy |
 | Beanstalk health **Severe** | Beanstalk → your environment → **Logs** → **Request Logs** → **Last 100 Lines** |
