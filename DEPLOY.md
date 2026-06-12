@@ -240,6 +240,7 @@ GitHub rebuilds and redeploys automatically. Wait for the green check in **Actio
 | Browser shows old sample app | Wait for deploy to finish; in Beanstalk console check **Health** is green |
 | `/actuator/health` shows dynamodb **DOWN** | Do Part 2 again (Step 7) — EC2 role missing DynamoDB policy |
 | Beanstalk health **Severe** | Beanstalk → your environment → **Logs** → **Request Logs** → **Last 100 Lines** |
+| Browser shows **502 Bad Gateway** | App must listen on port **5000** on Beanstalk (fixed in `Procfile`); push latest code and redeploy |
 
 ---
 
