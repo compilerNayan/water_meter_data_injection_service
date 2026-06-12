@@ -1,0 +1,53 @@
+name: Deploy Data Injection Service
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  EB_APPLICATION: water-meter-data-injection
+  EB_ENVIRONMENT: water-meter-data-injection-env
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build JAR
+        run: mvn -B clean package
+
+      - name: Package for Elastic Beanstalk
+        run: |
+          cp target/water-meter-data-injection-service-0.0.1-SNAPSHOT.jar app.jar
+          zip -r deploy.zip app.jar Procfile .ebextensions
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::748359027058:role/github-actions-data-injection-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v22
+        with:
+          aws_region: ${{ env.AWS_REGION }}
+          application_name: ${{ env.EB_APPLICATION }}
+          environment_name: ${{ env.EB_ENVIRONMENT }}
+          version_label: ${{ github.sha }}
+          deployment_package: deploy.zip
