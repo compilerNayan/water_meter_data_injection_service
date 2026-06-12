@@ -14,32 +14,32 @@ import org.springframework.stereotype.Component;
 @Component
 public class DeviceMqttResponseTracker {
 
-    private final ConcurrentHashMap<String, CompletableFuture<Map<String, Object>>> pending =
+    private final ConcurrentHashMap<String, CompletableFuture<DeviceMqttHttpResponse>> pending =
             new ConcurrentHashMap<>();
 
-    public CompletableFuture<Map<String, Object>> beginAwaitingResponse(
+    public CompletableFuture<DeviceMqttHttpResponse> beginAwaitingResponse(
             String tenantId, String deviceId) {
         String key = deviceKey(tenantId, deviceId);
-        CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
+        CompletableFuture<DeviceMqttHttpResponse> future = new CompletableFuture<>();
         pending.put(key, future);
         return future;
     }
 
-    public void completeResponse(String tenantId, String deviceId, Map<String, Object> responseBody) {
+    public void completeResponse(String tenantId, String deviceId, DeviceMqttHttpResponse response) {
         String key = deviceKey(tenantId, deviceId);
-        CompletableFuture<Map<String, Object>> future = pending.remove(key);
+        CompletableFuture<DeviceMqttHttpResponse> future = pending.remove(key);
         if (future != null) {
-            future.complete(responseBody);
+            future.complete(response);
         }
     }
 
-    public Optional<CompletableFuture<Map<String, Object>>> getPending(
+    public Optional<CompletableFuture<DeviceMqttHttpResponse>> getPending(
             String tenantId, String deviceId) {
         return Optional.ofNullable(pending.get(deviceKey(tenantId, deviceId)));
     }
 
     public void cancel(String tenantId, String deviceId) {
-        CompletableFuture<Map<String, Object>> future =
+        CompletableFuture<DeviceMqttHttpResponse> future =
                 pending.remove(deviceKey(tenantId, deviceId));
         if (future != null) {
             future.cancel(true);

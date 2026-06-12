@@ -28,18 +28,18 @@ public class DeviceMqttCommandService {
      * Publishes an HTTP request string to {@code .../command} and waits for the matching
      * {@code .../status} response (one in-flight command per device).
      */
-    public Map<String, Object> sendHttpCommandAndAwaitResponse(
+    public DeviceMqttHttpResponse sendHttpCommandAndAwaitResponse(
             String tenantId, String deviceId, String httpRequest) {
         return sendHttpCommandAndAwaitResponse(
                 tenantId, deviceId, httpRequest, DEFAULT_RESPONSE_TIMEOUT);
     }
 
-    public Map<String, Object> sendHttpCommandAndAwaitResponse(
+    public DeviceMqttHttpResponse sendHttpCommandAndAwaitResponse(
             String tenantId, String deviceId, String httpRequest, Duration timeout) {
         String commandTopic = DeviceMqttTopics.commandTopic(tenantId, deviceId);
         String statusTopic = DeviceMqttTopics.statusTopic(tenantId, deviceId);
 
-        CompletableFuture<Map<String, Object>> pending =
+        CompletableFuture<DeviceMqttHttpResponse> pending =
                 responseTracker.beginAwaitingResponse(tenantId, deviceId);
         mqttClient.ensureSubscribed(statusTopic);
         mqttClient.publish(commandTopic, httpRequest);

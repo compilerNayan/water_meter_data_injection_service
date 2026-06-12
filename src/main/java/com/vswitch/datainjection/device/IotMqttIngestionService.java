@@ -167,10 +167,11 @@ public class IotMqttIngestionService {
 
     private void handleStatusResponse(
             MqttTopicParser.ParsedMqttTopic parsed, Map<String, Object> event) {
-        Map<String, Object> responseBody =
-                DeviceMqttHttpPayloadParser.parseJsonBody(event, objectMapper);
+        DeviceMqttHttpResponse httpResponse =
+                DeviceMqttHttpResponseParser.parse(event, objectMapper);
+        Map<String, Object> responseBody = httpResponse.body();
 
-        responseTracker.completeResponse(parsed.tenantId(), parsed.deviceId(), responseBody);
+        responseTracker.completeResponse(parsed.tenantId(), parsed.deviceId(), httpResponse);
 
         if (hasValveFields(responseBody)) {
             double target =

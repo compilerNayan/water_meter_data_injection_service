@@ -102,7 +102,9 @@ class IotMqttIngestionServiceTest {
 
         verify(deviceFacade).ingestValveStateReport("k3m9x2a", "WM000001", 80.0, 78.0);
 
+        DeviceMqttHttpResponse httpResponse = pending.join();
+        org.junit.jupiter.api.Assertions.assertEquals(200, httpResponse.statusCode());
         org.junit.jupiter.api.Assertions.assertEquals(
-                80, ((Number) pending.join().get("targetPressurePercent")).intValue());
+                80, ((Number) httpResponse.body().get("targetPressurePercent")).intValue());
     }
 }
