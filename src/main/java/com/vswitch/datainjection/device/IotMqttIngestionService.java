@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.EnrollmentCompletionService;
+import com.vswitch.datainjection.live.LiveUpdateMessage;
+import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
 @Service
 public class IotMqttIngestionService {
@@ -22,16 +24,19 @@ public class IotMqttIngestionService {
     private final DeviceFacade deviceFacade;
     private final EnrollmentCompletionService enrollmentCompletionService;
     private final DeviceMqttResponseTracker responseTracker;
+    private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
     private final ObjectMapper objectMapper;
 
     IotMqttIngestionService(
             DeviceFacade deviceFacade,
             EnrollmentCompletionService enrollmentCompletionService,
             DeviceMqttResponseTracker responseTracker,
+            TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
             ObjectMapper objectMapper) {
         this.deviceFacade = deviceFacade;
         this.enrollmentCompletionService = enrollmentCompletionService;
         this.responseTracker = responseTracker;
+        this.liveUpdateBroadcaster = liveUpdateBroadcaster;
         this.objectMapper = objectMapper;
     }
 
@@ -121,6 +126,9 @@ public class IotMqttIngestionService {
                 tsRaw != null && !tsRaw.isBlank() ? Instant.parse(tsRaw) : Instant.now();
         double ml = doubleField(event, "ml");
         deviceFacade.ingestSecondPulse(tenantId, deviceId, ts, ml);
+        if (ml > 0) {
+            broadcastWaterFlow(tenantId, deviceId, ts, ml);
+        }
     }
 
     private void handleThirtyMinuteBucket(
@@ -160,9 +168,38 @@ public class IotMqttIngestionService {
                             minutes,
                             cumulativeLiters,
                             valveTargetPercent));
+            broadcastBucket30m(tenantId, deviceId, periodStart);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid 30-minute bucket payload", e);
         }
+    }
+
+    private void broadcastWaterFlow(
+            String tenantId, String deviceId, Instant ts, double ml) {
+        try {
+            double flowRateLpm = ml / 1000.0 * 60;
+            liveUpdateBroadcaster.broadcast(
+                    tenantId,
+                    LiveUpdateMessage.waterFlow(
+                            tenantId, deviceId, unitIdFor(deviceId), ts, ml, flowRateLpm));
+        } catch (Exception e) {
+            log.warn("Failed to broadcast water_flow for {}/{}", tenantId, deviceId, e);
+        }
+    }
+
+    private void broadcastBucket30m(String tenantId, String deviceId, Instant periodStart) {
+        try {
+            liveUpdateBroadcaster.broadcast(
+                    tenantId,
+                    LiveUpdateMessage.bucket30m(
+                            tenantId, deviceId, unitIdFor(deviceId), periodStart));
+        } catch (Exception e) {
+            log.warn("Failed to broadcast bucket_30m for {}/{}", tenantId, deviceId, e);
+        }
+    }
+
+    private static String unitIdFor(String deviceId) {
+        return "wm-" + deviceId;
     }
 
     private void handleStatusResponse(

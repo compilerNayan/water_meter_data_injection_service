@@ -101,7 +101,7 @@ public class UserService {
 
     record UserRegistrationResult(UserResponse response, boolean created) {}
 
-    void requireTenantMember(String userId, String tenantId) {
+    public void requireTenantMember(String userId, String tenantId) {
         UserRecord user = requireUser(userId);
         if (user.tenantId() == null || user.tenantId().isBlank()) {
             throw new ResponseStatusException(

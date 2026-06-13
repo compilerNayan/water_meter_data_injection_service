@@ -11,8 +11,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.EnrollmentCompletionService;
+import com.vswitch.datainjection.live.LiveUpdateMessage;
+import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -20,6 +23,7 @@ class IotMqttIngestionServiceTest {
 
     @Mock private DeviceFacade deviceFacade;
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
+    @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
 
     private DeviceMqttResponseTracker responseTracker;
     private IotMqttIngestionService service;
@@ -32,6 +36,7 @@ class IotMqttIngestionServiceTest {
                         deviceFacade,
                         enrollmentCompletionService,
                         responseTracker,
+                        liveUpdateBroadcaster,
                         new ObjectMapper());
     }
 
@@ -71,6 +76,52 @@ class IotMqttIngestionServiceTest {
                         eq("WM000001"),
                         eq(Instant.parse("2026-06-09T10:30:05Z")),
                         eq(45.0));
+        verify(liveUpdateBroadcaster)
+                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any(LiveUpdateMessage.class));
+    }
+
+    @Test
+    void water1sWithZeroMlDoesNotBroadcast() {
+        service.handleEvent(
+                Map.of(
+                        "mqttTopic",
+                        "k3m9x2a/water_meter/WM000001/water/1s",
+                        "ts",
+                        "2026-06-09T10:30:05Z",
+                        "ml",
+                        0));
+
+        verify(deviceFacade)
+                .ingestSecondPulse(
+                        eq("k3m9x2a"),
+                        eq("WM000001"),
+                        eq(Instant.parse("2026-06-09T10:30:05Z")),
+                        eq(0.0));
+        verify(liveUpdateBroadcaster, never())
+                .broadcast(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void thirtyMinuteBucketBroadcastsRefreshSignal() {
+        service.handleEvent(
+                Map.of(
+                        "mqttTopic",
+                        "k3m9x2a/water_meter/WM000001/water/30m",
+                        "tenantId",
+                        "k3m9x2a",
+                        "deviceId",
+                        "WM000001",
+                        "periodStart",
+                        "2026-06-09T10:00:00Z",
+                        "minutes",
+                        java.util.List.of(),
+                        "cumulativeLiters",
+                        12.5,
+                        "valveTargetPercent",
+                        100));
+
+        verify(liveUpdateBroadcaster)
+                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any(LiveUpdateMessage.class));
     }
 
     @Test

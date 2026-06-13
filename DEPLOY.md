@@ -232,6 +232,32 @@ Health check: `/actuator/health` should show `"mqtt":{"status":"UP"}` when conne
 
 ---
 
+## Tenant live WebSocket (`/ws/live`)
+
+Flutter apps connect here for tenant-scoped live MQTT pushes (`water_flow`, `bucket_30m`).
+
+In Beanstalk → **Configuration** → **Software** → **Environment properties**, set:
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `COGNITO_ISSUER_URI` | `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_vm19Xv95r` | JWT validation for subscribe + `/api/**` |
+| `LIVE_UPDATES_ENABLED` | `true` | Enable WebSocket hub and MQTT broadcast |
+
+WebSocket URL for the app (replace with your Beanstalk hostname):
+
+`ws://water-meter-data-injection-env.eba-xxxxx.ap-south-1.elasticbeanstalk.com/ws/live`
+
+Nginx WebSocket proxy headers are in `.ebextensions/nginx/conf.d/websocket.conf`. Single-instance Beanstalk works without sticky sessions; ALB + multiple instances would need stickiness later.
+
+Verify with `wscat` after deploy:
+
+```bash
+wscat -c ws://YOUR-URL/ws/live
+# then send: {"type":"subscribe","tenantId":"YOUR_TENANT","token":"YOUR_COGNITO_JWT"}
+```
+
+---
+
 ## Day to day (after setup)
 
 Whenever you change code:
