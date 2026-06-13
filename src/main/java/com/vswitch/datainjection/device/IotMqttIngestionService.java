@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.EnrollmentCompletionService;
+import com.vswitch.datainjection.device.stream.DeviceStreamIngestionService;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
@@ -25,6 +26,7 @@ public class IotMqttIngestionService {
     private final EnrollmentCompletionService enrollmentCompletionService;
     private final DeviceMqttResponseTracker responseTracker;
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    private final DeviceStreamIngestionService deviceStreamIngestionService;
     private final ObjectMapper objectMapper;
 
     IotMqttIngestionService(
@@ -32,11 +34,13 @@ public class IotMqttIngestionService {
             EnrollmentCompletionService enrollmentCompletionService,
             DeviceMqttResponseTracker responseTracker,
             TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
+            DeviceStreamIngestionService deviceStreamIngestionService,
             ObjectMapper objectMapper) {
         this.deviceFacade = deviceFacade;
         this.enrollmentCompletionService = enrollmentCompletionService;
         this.responseTracker = responseTracker;
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
+        this.deviceStreamIngestionService = deviceStreamIngestionService;
         this.objectMapper = objectMapper;
     }
 
@@ -119,16 +123,10 @@ public class IotMqttIngestionService {
     }
 
     private void handleSecondPulse(MqttTopicParser.ParsedMqttTopic parsed, Map<String, Object> event) {
-        String tenantId = parsed.tenantId();
-        String deviceId = parsed.deviceId();
-        String tsRaw = stringField(event, "ts");
-        Instant ts =
-                tsRaw != null && !tsRaw.isBlank() ? Instant.parse(tsRaw) : Instant.now();
-        double ml = doubleField(event, "ml");
-        deviceFacade.ingestSecondPulse(tenantId, deviceId, ts, ml);
-        if (ml > 0) {
-            broadcastWaterFlow(tenantId, deviceId, ts, ml);
-        }
+        log.debug(
+                "Ignoring MQTT water/1s for {}/{}; live 1s telemetry is ingested via device stream socket",
+                parsed.tenantId(),
+                parsed.deviceId());
     }
 
     private void handleThirtyMinuteBucket(
@@ -168,30 +166,10 @@ public class IotMqttIngestionService {
                             minutes,
                             cumulativeLiters,
                             valveTargetPercent));
+            deviceStreamIngestionService.clearLiveTelemetry(deviceId);
             broadcastBucket30m(tenantId, deviceId, periodStart);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid 30-minute bucket payload", e);
-        }
-    }
-
-    private void broadcastWaterFlow(
-            String tenantId, String deviceId, Instant ts, double ml) {
-        try {
-            double flowRateLpm = ml / 1000.0 * 60;
-            double cumulativeLiters =
-                    deviceFacade.getCurrentReading(deviceId).cumulativeLiters();
-            liveUpdateBroadcaster.broadcast(
-                    tenantId,
-                    LiveUpdateMessage.waterFlow(
-                            tenantId,
-                            deviceId,
-                            unitIdFor(deviceId),
-                            ts,
-                            ml,
-                            flowRateLpm,
-                            cumulativeLiters));
-        } catch (Exception e) {
-            log.warn("Failed to broadcast water_flow for {}/{}", tenantId, deviceId, e);
         }
     }
 

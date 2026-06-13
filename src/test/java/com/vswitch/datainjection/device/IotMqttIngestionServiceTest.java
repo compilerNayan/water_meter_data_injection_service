@@ -10,15 +10,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vswitch.datainjection.CurrentReadingResponse;
 import com.vswitch.datainjection.EnrollmentCompletionService;
-import com.vswitch.datainjection.live.LiveUpdateMessage;
+import com.vswitch.datainjection.device.stream.DeviceStreamIngestionService;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IotMqttIngestionServiceTest {
@@ -26,6 +24,7 @@ class IotMqttIngestionServiceTest {
     @Mock private DeviceFacade deviceFacade;
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    @Mock private DeviceStreamIngestionService deviceStreamIngestionService;
 
     private DeviceMqttResponseTracker responseTracker;
     private IotMqttIngestionService service;
@@ -39,6 +38,7 @@ class IotMqttIngestionServiceTest {
                         enrollmentCompletionService,
                         responseTracker,
                         liveUpdateBroadcaster,
+                        deviceStreamIngestionService,
                         new ObjectMapper());
     }
 
@@ -62,16 +62,7 @@ class IotMqttIngestionServiceTest {
     }
 
     @Test
-    void routesWater1sPulse() {
-        when(deviceFacade.getCurrentReading("WM000001"))
-                .thenReturn(
-                        new CurrentReadingResponse(
-                                "WM000001",
-                                "2026-06-09T10:30:05Z",
-                                2.7,
-                                123.045,
-                                "flowing"));
-
+    void ignoresMqttWater1sPulse() {
         service.handleEvent(
                 Map.of(
                         "mqttTopic",
@@ -81,39 +72,13 @@ class IotMqttIngestionServiceTest {
                         "ml",
                         45));
 
-        verify(deviceFacade)
-                .ingestSecondPulse(
-                        eq("k3m9x2a"),
-                        eq("WM000001"),
-                        eq(Instant.parse("2026-06-09T10:30:05Z")),
-                        eq(45.0));
-        verify(liveUpdateBroadcaster)
-                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any(LiveUpdateMessage.class));
-    }
-
-    @Test
-    void water1sWithZeroMlDoesNotBroadcast() {
-        service.handleEvent(
-                Map.of(
-                        "mqttTopic",
-                        "k3m9x2a/water_meter/WM000001/water/1s",
-                        "ts",
-                        "2026-06-09T10:30:05Z",
-                        "ml",
-                        0));
-
-        verify(deviceFacade)
-                .ingestSecondPulse(
-                        eq("k3m9x2a"),
-                        eq("WM000001"),
-                        eq(Instant.parse("2026-06-09T10:30:05Z")),
-                        eq(0.0));
+        verify(deviceFacade, never()).ingestSecondPulse(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble());
         verify(liveUpdateBroadcaster, never())
                 .broadcast(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void thirtyMinuteBucketBroadcastsRefreshSignal() {
+    void thirtyMinuteBucketClearsStreamStateAndBroadcastsRefresh() {
         service.handleEvent(
                 Map.of(
                         "mqttTopic",
@@ -131,22 +96,18 @@ class IotMqttIngestionServiceTest {
                         "valveTargetPercent",
                         100));
 
+        verify(deviceStreamIngestionService).clearLiveTelemetry("WM000001");
         verify(liveUpdateBroadcaster)
-                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any(LiveUpdateMessage.class));
+                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    void ingestsFromRawMqttMessage() {
+    void ingestsFromRawMqttMessageIgnoresWater1s() {
         service.handleMqttMessage(
                 "k3m9x2a/water_meter/WM000001/water/1s",
                 "{\"ts\":\"2026-06-09T10:30:05Z\",\"ml\":45}".getBytes());
 
-        verify(deviceFacade)
-                .ingestSecondPulse(
-                        eq("k3m9x2a"),
-                        eq("WM000001"),
-                        eq(Instant.parse("2026-06-09T10:30:05Z")),
-                        eq(45.0));
+        verify(deviceFacade, never()).ingestSecondPulse(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble());
     }
 
     @Test

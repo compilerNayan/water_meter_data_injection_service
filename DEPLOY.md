@@ -232,16 +232,45 @@ Health check: `/actuator/health` should show `"mqtt":{"status":"UP"}` when conne
 
 ---
 
+## Device stream TCP (live 1s water pulses)
+
+IoT devices send **newline-delimited JSON** over plain TCP. The service stores the latest pulse in memory and pushes `water_flow` to tenant WebSocket subscribers (`/ws/live`). MQTT `water/1s` is ignored for live telemetry; `water/30m` remains authoritative via MQTT.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DEVICE_STREAM_ENABLED` | `true` | Enable TCP listener |
+| `DEVICE_STREAM_PORT` | `9100` | TCP port (not proxied by nginx) |
+
+**Open port 9100** on the Beanstalk EC2 security group so devices can reach the instance directly.
+
+Example pulse line (one per second while connected):
+
+```json
+{"tenantId":"63tk0y1","serialNumber":"QJPDXN094","ml":45,"cumulativeLiters":123.456,"ts":"2026-06-13T10:00:05Z"}
+```
+
+Server replies per line: `{"ok":true}` or `{"ok":false,"error":"..."}`.
+
+Verify after deploy:
+
+```bash
+nc YOUR-BEANSTALK-HOST 9100
+{"tenantId":"63tk0y1","serialNumber":"QJPDXN094","ml":45,"cumulativeLiters":123.4,"ts":"2026-06-13T10:00:05Z"}
+```
+
+---
+
 ## Tenant live WebSocket (`/ws/live`)
 
-Flutter apps connect here for tenant-scoped live MQTT pushes (`water_flow`, `bucket_30m`).
+Flutter apps connect here for tenant-scoped live pushes (`water_flow`, `bucket_30m`). `water_flow` is sourced from the device stream socket, not MQTT `water/1s`.
 
 In Beanstalk → **Configuration** → **Software** → **Environment properties**, set:
 
 | Variable | Example | Purpose |
 |----------|---------|---------|
 | `COGNITO_ISSUER_URI` | `https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_vm19Xv95r` | JWT validation for subscribe + `/api/**` |
-| `LIVE_UPDATES_ENABLED` | `true` | Enable WebSocket hub and MQTT broadcast |
+| `LIVE_UPDATES_ENABLED` | `true` | Enable WebSocket hub and live broadcast |
+| `DEVICE_STREAM_ENABLED` | `true` | Enable device TCP stream on port 9100 |
 
 WebSocket URL for the app (replace with your Beanstalk hostname):
 
