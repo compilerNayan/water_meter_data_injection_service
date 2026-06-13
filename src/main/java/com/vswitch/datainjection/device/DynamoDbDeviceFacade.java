@@ -119,12 +119,13 @@ public class DynamoDbDeviceFacade implements DeviceFacade {
     public void ingestSecondPulse(String tenantId, String deviceId, Instant ts, double ml) {
         DeviceStateRecord current = requireDeviceState(deviceId, tenantId);
         double flowLpm = ml / 1000.0 * 60;
+        double cumulativeLiters = current.cumulativeLiters() + ml / 1000.0;
         String now = Instant.now().toString();
         DeviceStateRecord updated =
                 new DeviceStateRecord(
                         deviceId,
                         tenantId,
-                        current.cumulativeLiters(),
+                        cumulativeLiters,
                         flowLpm,
                         flowLpm > 0.2
                                 ? DeviceStateRecord.STATUS_FLOWING

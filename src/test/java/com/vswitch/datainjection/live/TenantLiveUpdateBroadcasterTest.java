@@ -48,7 +48,8 @@ class TenantLiveUpdateBroadcasterTest {
                         "wm-WM000001",
                         Instant.parse("2026-06-09T10:30:05Z"),
                         45,
-                        2.7));
+                        2.7,
+                        123.45));
 
         verify(session, never()).sendMessage(any());
     }

@@ -178,10 +178,18 @@ public class IotMqttIngestionService {
             String tenantId, String deviceId, Instant ts, double ml) {
         try {
             double flowRateLpm = ml / 1000.0 * 60;
+            double cumulativeLiters =
+                    deviceFacade.getCurrentReading(deviceId).cumulativeLiters();
             liveUpdateBroadcaster.broadcast(
                     tenantId,
                     LiveUpdateMessage.waterFlow(
-                            tenantId, deviceId, unitIdFor(deviceId), ts, ml, flowRateLpm));
+                            tenantId,
+                            deviceId,
+                            unitIdFor(deviceId),
+                            ts,
+                            ml,
+                            flowRateLpm,
+                            cumulativeLiters));
         } catch (Exception e) {
             log.warn("Failed to broadcast water_flow for {}/{}", tenantId, deviceId, e);
         }

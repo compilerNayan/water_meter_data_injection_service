@@ -85,5 +85,9 @@ class DynamoDbDeviceFacadeTest {
         assertEquals(
                 DeviceStateRecord.STATUS_FLOWING,
                 putCaptor.getValue().item().get("status").s());
+        assertEquals(
+                101.0,
+                Double.parseDouble(putCaptor.getValue().item().get("cumulativeLiters").n()),
+                0.001);
     }
 }

@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vswitch.datainjection.CurrentReadingResponse;
 import com.vswitch.datainjection.EnrollmentCompletionService;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
@@ -17,6 +18,7 @@ import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IotMqttIngestionServiceTest {
@@ -61,6 +63,15 @@ class IotMqttIngestionServiceTest {
 
     @Test
     void routesWater1sPulse() {
+        when(deviceFacade.getCurrentReading("WM000001"))
+                .thenReturn(
+                        new CurrentReadingResponse(
+                                "WM000001",
+                                "2026-06-09T10:30:05Z",
+                                2.7,
+                                123.045,
+                                "flowing"));
+
         service.handleEvent(
                 Map.of(
                         "mqttTopic",

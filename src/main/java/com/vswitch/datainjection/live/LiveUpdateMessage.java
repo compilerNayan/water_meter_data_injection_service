@@ -13,6 +13,7 @@ public record LiveUpdateMessage(
         String ts,
         Double ml,
         Double flowRateLpm,
+        Double cumulativeLiters,
         String status,
         String periodStart,
         String action,
@@ -30,7 +31,8 @@ public record LiveUpdateMessage(
             String unitId,
             Instant ts,
             double ml,
-            double flowRateLpm) {
+            double flowRateLpm,
+            double cumulativeLiters) {
         return new LiveUpdateMessage(
                 TYPE_WATER_FLOW,
                 tenantId,
@@ -39,6 +41,7 @@ public record LiveUpdateMessage(
                 ts.toString(),
                 ml,
                 flowRateLpm,
+                cumulativeLiters,
                 "flowing",
                 null,
                 null,
@@ -57,6 +60,7 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 null,
+                null,
                 periodStart.toString(),
                 "refresh",
                 null,
@@ -65,11 +69,35 @@ public record LiveUpdateMessage(
 
     public static LiveUpdateMessage subscribed(String tenantId) {
         return new LiveUpdateMessage(
-                TYPE_SUBSCRIBED, tenantId, null, null, null, null, null, null, null, null, null, null);
+                TYPE_SUBSCRIBED,
+                tenantId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static LiveUpdateMessage error(String code, String message) {
         return new LiveUpdateMessage(
-                TYPE_ERROR, null, null, null, null, null, null, null, null, null, code, message);
+                TYPE_ERROR,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                code,
+                message);
     }
 }
