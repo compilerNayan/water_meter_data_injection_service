@@ -72,6 +72,11 @@ public class EnrollmentRequestStreamHandler {
                     ex.getReason() != null ? ex.getReason() : ex.getMessage());
             notifyEnrollmentFailure(session, serialNumber, ex);
             return;
+        } catch (Exception ex) {
+            log.error("Unexpected error looking up tenant for serial={}", serialNumber, ex);
+            notifyEnrollmentFailure(
+                    session, serialNumber, ex.getMessage(), "ENROLLMENT_LOOKUP_ERROR");
+            return;
         }
 
         notifyEnrollmentSuccess(session, envelope, lookup, serialNumber);

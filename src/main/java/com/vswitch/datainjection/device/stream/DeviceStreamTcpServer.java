@@ -129,6 +129,10 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
                                         + escapeJson(e.getMessage())
                                         + "\"}\n");
                         writer.flush();
+                    } catch (Exception e) {
+                        log.error("Failed to process device stream line from {}", remote, e);
+                        writer.write("{\"ok\":false,\"error\":\"internal\"}\n");
+                        writer.flush();
                     }
                 }
             } catch (IOException e) {
