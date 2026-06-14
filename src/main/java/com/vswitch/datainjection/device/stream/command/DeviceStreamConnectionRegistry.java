@@ -13,7 +13,11 @@ public class DeviceStreamConnectionRegistry {
             new ConcurrentHashMap<>();
 
     public void registerSession(DeviceStreamSession session) {
-        serialBySession.put(session, null);
+        if (session == null) {
+            return;
+        }
+        // ConcurrentHashMap does not allow null values; "" means "connected, serial not bound yet".
+        serialBySession.putIfAbsent(session, "");
     }
 
     public void bindSerial(DeviceStreamSession session, String serialNumber) {
@@ -33,7 +37,7 @@ public class DeviceStreamConnectionRegistry {
             return;
         }
         String serial = serialBySession.remove(session);
-        if (serial != null) {
+        if (serial != null && !serial.isBlank()) {
             bySerial.remove(serial, session);
         }
     }
