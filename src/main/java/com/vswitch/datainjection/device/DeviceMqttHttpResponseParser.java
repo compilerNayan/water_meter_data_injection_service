@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-final class DeviceMqttHttpResponseParser {
+public final class DeviceMqttHttpResponseParser {
 
     private static final Pattern STATUS_LINE = Pattern.compile("HTTP/1\\.[01]\\s+(\\d+)");
 
@@ -21,7 +21,7 @@ final class DeviceMqttHttpResponseParser {
         return new DeviceMqttHttpResponse(200, DeviceMqttHttpPayloadParser.parseJsonBody(event, objectMapper));
     }
 
-    static DeviceMqttHttpResponse parseHttpText(String raw, ObjectMapper objectMapper) {
+    public static DeviceMqttHttpResponse parseHttpText(String raw, ObjectMapper objectMapper) {
         int statusCode = 200;
         Matcher matcher = STATUS_LINE.matcher(raw);
         if (matcher.find()) {

@@ -22,14 +22,19 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
+import com.vswitch.datainjection.device.stream.handler.DeviceStreamLineRouter;
+import com.vswitch.datainjection.device.stream.protocol.DeviceStreamEnvelope;
+import com.vswitch.datainjection.device.stream.protocol.DeviceStreamEnvelopeParser;
 
 import jakarta.annotation.PreDestroy;
 
 /**
- * Accepts newline-delimited JSON pulses from IoT devices over plain TCP.
+ * Accepts newline-delimited JSON from IoT devices over plain TCP (port 9100).
  *
- * <p>Example line:
- * {"tenantId":"63tk0y1","serialNumber":"QJPDXN094","ml":45,"cumulativeLiters":123.456,"ts":"2026-06-13T10:00:05Z"}
+ * <p>Supports legacy flat pulse lines and v1 category envelopes (enrollment_request, device_message,
+ * water_pulse, etc.).
  */
 @Component
 @ConditionalOnProperty(name = "device.stream.enabled", havingValue = "true", matchIfMissing = true)
@@ -38,6 +43,8 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DeviceStreamTcpServer.class);
 
     private final DeviceStreamIngestionService ingestionService;
+    private final DeviceStreamConnectionRegistry connectionRegistry;
+    private final DeviceStreamLineRouter lineRouter;
     private final ObjectMapper objectMapper;
     private final int port;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -48,9 +55,13 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
 
     DeviceStreamTcpServer(
             DeviceStreamIngestionService ingestionService,
+            DeviceStreamConnectionRegistry connectionRegistry,
+            DeviceStreamLineRouter lineRouter,
             ObjectMapper objectMapper,
             @Value("${device.stream.port:9100}") int port) {
         this.ingestionService = ingestionService;
+        this.connectionRegistry = connectionRegistry;
+        this.lineRouter = lineRouter;
         this.objectMapper = objectMapper;
         this.port = port;
     }
@@ -83,7 +94,9 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
     private void handleClient(Socket socket) {
         String remote = socket.getRemoteSocketAddress().toString();
         log.info("Device stream connected from {}", remote);
-        DeviceStreamPulseParser parser = new DeviceStreamPulseParser(objectMapper);
+
+        DeviceStreamPulseParser pulseParser = new DeviceStreamPulseParser(objectMapper);
+        DeviceStreamEnvelopeParser envelopeParser = new DeviceStreamEnvelopeParser(objectMapper);
 
         try (socket;
                 BufferedReader reader =
@@ -91,27 +104,81 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
                                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 Writer writer =
                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) {
-                    continue;
+
+            DeviceStreamSession session = new DeviceStreamSession(writer);
+            connectionRegistry.registerSession(session);
+
+            try {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isBlank()) {
+                        continue;
+                    }
+                    try {
+                        if (envelopeParser.looksLikeEnvelope(line)) {
+                            handleEnvelopeLine(line, envelopeParser, session);
+                        } else {
+                            handleLegacyPulseLine(line, pulseParser);
+                        }
+                        writer.write("{\"ok\":true}\n");
+                        writer.flush();
+                    } catch (IllegalArgumentException e) {
+                        log.warn("Rejected device stream line from {}: {}", remote, e.getMessage());
+                        writer.write(
+                                "{\"ok\":false,\"error\":\""
+                                        + escapeJson(e.getMessage())
+                                        + "\"}\n");
+                        writer.flush();
+                    }
                 }
-                try {
-                    DeviceStreamPulsePayload payload = parser.parseLine(line);
-                    ingestionService.ingestPulse(payload);
-                    writer.write("{\"ok\":true}\n");
-                    writer.flush();
-                } catch (IllegalArgumentException e) {
-                    log.warn("Rejected device stream line from {}: {}", remote, e.getMessage());
-                    writer.write("{\"ok\":false,\"error\":\"" + escapeJson(e.getMessage()) + "\"}\n");
-                    writer.flush();
-                }
+            } catch (IOException e) {
+                log.debug("Device stream disconnected from {} ({})", remote, e.getMessage());
+            } finally {
+                connectionRegistry.unregisterSession(session);
+                log.info("Device stream closed from {}", remote);
             }
         } catch (IOException e) {
-            log.debug("Device stream disconnected from {} ({})", remote, e.getMessage());
-        } finally {
-            log.info("Device stream closed from {}", remote);
+            log.debug("Device stream I/O error from {} ({})", remote, e.getMessage());
         }
+    }
+
+    private void handleEnvelopeLine(
+            String line, DeviceStreamEnvelopeParser envelopeParser, DeviceStreamSession session) {
+        DeviceStreamEnvelope envelope = envelopeParser.parseEnvelope(line);
+
+        if ("water_pulse".equals(envelope.category())) {
+            handleWaterPulseEnvelope(envelope);
+            return;
+        }
+
+        lineRouter.routeEnvelope(envelope, session);
+    }
+
+    private void handleWaterPulseEnvelope(DeviceStreamEnvelope envelope) {
+        if (envelope.data() == null || envelope.data().isNull()) {
+            throw new IllegalArgumentException("water_pulse envelope missing data");
+        }
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode merged =
+                    (com.fasterxml.jackson.databind.node.ObjectNode) envelope.data().deepCopy();
+            if (!merged.hasNonNull("tenantId") && envelope.tenantId() != null) {
+                merged.put("tenantId", envelope.tenantId());
+            }
+            if (!merged.hasNonNull("serialNumber") && envelope.serialNumber() != null) {
+                merged.put("serialNumber", envelope.serialNumber());
+            }
+            DeviceStreamPulseParser pulseParser = new DeviceStreamPulseParser(objectMapper);
+            DeviceStreamPulsePayload payload =
+                    pulseParser.parseLine(objectMapper.writeValueAsString(merged));
+            ingestionService.ingestPulse(payload);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Invalid water_pulse envelope data", e);
+        }
+    }
+
+    private void handleLegacyPulseLine(String line, DeviceStreamPulseParser pulseParser) {
+        DeviceStreamPulsePayload payload = pulseParser.parseLine(line);
+        ingestionService.ingestPulse(payload);
     }
 
     @PreDestroy

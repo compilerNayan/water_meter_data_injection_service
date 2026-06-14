@@ -81,7 +81,7 @@ public class DevicePreEnrollService {
                 tenantId, serialNumber, STATUS_PENDING, expiresAt.toString());
     }
 
-    DeviceTenantLookupResponse lookupTenantBySerial(String serialNumber) {
+    public DeviceTenantLookupResponse lookupTenantBySerial(String serialNumber) {
         if (serialNumber == null || serialNumber.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "serialNumber is required");
