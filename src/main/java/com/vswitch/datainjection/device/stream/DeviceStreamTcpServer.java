@@ -118,7 +118,7 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
                         if (envelopeParser.looksLikeEnvelope(line)) {
                             handleEnvelopeLine(line, envelopeParser, session);
                         } else {
-                            handleLegacyPulseLine(line, pulseParser);
+                            handleLegacyPulseLine(line, pulseParser, session);
                         }
                         writer.write("{\"ok\":true}\n");
                         writer.flush();
@@ -147,11 +147,20 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
         DeviceStreamEnvelope envelope = envelopeParser.parseEnvelope(line);
 
         if ("water_pulse".equals(envelope.category())) {
+            bindSerial(envelope, session);
             handleWaterPulseEnvelope(envelope);
             return;
         }
 
         lineRouter.routeEnvelope(envelope, session);
+    }
+
+    private void bindSerial(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
+        if (envelope.serialNumber() == null || envelope.serialNumber().isBlank()) {
+            return;
+        }
+        session.bindSerialNumber(envelope.serialNumber());
+        connectionRegistry.bindSerial(session, envelope.serialNumber());
     }
 
     private void handleWaterPulseEnvelope(DeviceStreamEnvelope envelope) {
@@ -176,8 +185,13 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
         }
     }
 
-    private void handleLegacyPulseLine(String line, DeviceStreamPulseParser pulseParser) {
+    private void handleLegacyPulseLine(
+            String line, DeviceStreamPulseParser pulseParser, DeviceStreamSession session) {
         DeviceStreamPulsePayload payload = pulseParser.parseLine(line);
+        if (payload.serialNumber() != null && !payload.serialNumber().isBlank()) {
+            session.bindSerialNumber(payload.serialNumber());
+            connectionRegistry.bindSerial(session, payload.serialNumber());
+        }
         ingestionService.ingestPulse(payload);
     }
 

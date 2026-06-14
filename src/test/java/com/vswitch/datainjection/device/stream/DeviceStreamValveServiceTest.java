@@ -1,11 +1,17 @@
 package com.vswitch.datainjection.device.stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -27,27 +33,37 @@ class DeviceStreamValveServiceTest {
     }
 
     @Test
-    void getValveStateReturnsStubWithoutCallingDevice() {
+    void getValveStateSendsCurlStyleGetToValvePath() {
+        when(commandService.sendHttpCommandAndAwaitResponse(eq("WM001"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(new DeviceMqttHttpResponse(200, Map.of("targetPressurePercent", 80)));
+
         DeviceMqttHttpResponse response = valveService.getValveState("WM001");
 
         assertEquals(200, response.statusCode());
-        assertEquals(85, response.body().get("targetPressurePercent"));
-        assertEquals(82, response.body().get("actualPressurePercent"));
-        assertEquals("WM001", response.body().get("deviceSerial"));
-        assertEquals(true, response.body().get("stub"));
-        verifyNoInteractions(commandService);
+        ArgumentCaptor<String> httpCaptor = ArgumentCaptor.forClass(String.class);
+        verify(commandService).sendHttpCommandAndAwaitResponse(eq("WM001"), httpCaptor.capture());
+        String http = httpCaptor.getValue();
+        assertTrue(http.startsWith("GET /valve HTTP/1.1\r\n"));
+        assertTrue(http.contains("Host: localhost:8080\r\n"));
+        assertTrue(http.contains("User-Agent: curl/8.0.1\r\n"));
     }
 
     @Test
-    void setValveStateReturnsStubEchoingPressurePercent() {
+    void setValveStateSendsCurlStylePutWithPressurePercent() {
+        when(commandService.sendHttpCommandAndAwaitResponse(eq("WM001"), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(
+                        new DeviceMqttHttpResponse(
+                                200, Map.of("targetPressurePercent", 50, "actualPressurePercent", 50)));
+
         DeviceMqttHttpResponse response =
                 valveService.setValveState("WM001", new ValveSetRequest(50));
 
         assertEquals(200, response.statusCode());
-        assertEquals(50, response.body().get("targetPressurePercent"));
-        assertEquals(50, response.body().get("actualPressurePercent"));
-        assertEquals("WM001", response.body().get("deviceSerial"));
-        assertEquals(true, response.body().get("stub"));
-        verifyNoInteractions(commandService);
+        ArgumentCaptor<String> httpCaptor = ArgumentCaptor.forClass(String.class);
+        verify(commandService).sendHttpCommandAndAwaitResponse(eq("WM001"), httpCaptor.capture());
+        String http = httpCaptor.getValue();
+        assertTrue(http.startsWith("PUT /valve HTTP/1.1\r\n"));
+        assertTrue(http.contains("Content-Type: application/json\r\n"));
+        assertTrue(http.endsWith("\r\n\r\n{\"pressurePercent\":50}"));
     }
 }
