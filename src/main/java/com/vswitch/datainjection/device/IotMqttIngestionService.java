@@ -1,9 +1,6 @@
 package com.vswitch.datainjection.device;
 
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -13,9 +10,6 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.EnrollmentCompletionService;
-import com.vswitch.datainjection.device.stream.DeviceStreamIngestionService;
-import com.vswitch.datainjection.live.LiveUpdateMessage;
-import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
 @Service
 public class IotMqttIngestionService {
@@ -25,22 +19,16 @@ public class IotMqttIngestionService {
     private final DeviceFacade deviceFacade;
     private final EnrollmentCompletionService enrollmentCompletionService;
     private final DeviceMqttResponseTracker responseTracker;
-    private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
-    private final DeviceStreamIngestionService deviceStreamIngestionService;
     private final ObjectMapper objectMapper;
 
     IotMqttIngestionService(
             DeviceFacade deviceFacade,
             EnrollmentCompletionService enrollmentCompletionService,
             DeviceMqttResponseTracker responseTracker,
-            TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
-            DeviceStreamIngestionService deviceStreamIngestionService,
             ObjectMapper objectMapper) {
         this.deviceFacade = deviceFacade;
         this.enrollmentCompletionService = enrollmentCompletionService;
         this.responseTracker = responseTracker;
-        this.liveUpdateBroadcaster = liveUpdateBroadcaster;
-        this.deviceStreamIngestionService = deviceStreamIngestionService;
         this.objectMapper = objectMapper;
     }
 
@@ -131,61 +119,10 @@ public class IotMqttIngestionService {
 
     private void handleThirtyMinuteBucket(
             MqttTopicParser.ParsedMqttTopic parsed, Map<String, Object> event) {
-        try {
-            String json = objectMapper.writeValueAsString(event);
-            Map<String, Object> payload =
-                    objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-
-            String tenantId =
-                    firstNonBlank(stringField(payload, "tenantId"), parsed.tenantId());
-            String deviceId =
-                    firstNonBlank(stringField(payload, "deviceId"), parsed.deviceId());
-            String periodStartRaw = stringField(payload, "periodStart");
-            Instant periodStart = Instant.parse(periodStartRaw);
-
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> minuteMaps =
-                    (List<Map<String, Object>>) payload.get("minutes");
-            List<MinuteBucketEntry> minutes = new ArrayList<>();
-            if (minuteMaps != null) {
-                for (Map<String, Object> minute : minuteMaps) {
-                    String t = stringField(minute, "t");
-                    double ml = doubleField(minute, "ml");
-                    minutes.add(new MinuteBucketEntry(Instant.parse(t), ml));
-                }
-            }
-
-            double cumulativeLiters = doubleField(payload, "cumulativeLiters");
-            double valveTargetPercent = doubleField(payload, "valveTargetPercent", 100.0);
-
-            deviceFacade.ingest30MinuteBucket(
-                    new ThirtyMinuteBucketPayload(
-                            tenantId,
-                            deviceId,
-                            periodStart,
-                            minutes,
-                            cumulativeLiters,
-                            valveTargetPercent));
-            deviceStreamIngestionService.clearLiveTelemetry(deviceId);
-            broadcastBucket30m(tenantId, deviceId, periodStart);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid 30-minute bucket payload", e);
-        }
-    }
-
-    private void broadcastBucket30m(String tenantId, String deviceId, Instant periodStart) {
-        try {
-            liveUpdateBroadcaster.broadcast(
-                    tenantId,
-                    LiveUpdateMessage.bucket30m(
-                            tenantId, deviceId, unitIdFor(deviceId), periodStart));
-        } catch (Exception e) {
-            log.warn("Failed to broadcast bucket_30m for {}/{}", tenantId, deviceId, e);
-        }
-    }
-
-    private static String unitIdFor(String deviceId) {
-        return "wm-" + deviceId;
+        log.debug(
+                "Ignoring MQTT water/30m for {}/{}; 30-minute buckets are ingested via device stream socket",
+                parsed.tenantId(),
+                parsed.deviceId());
     }
 
     private void handleStatusResponse(

@@ -1,6 +1,5 @@
 package com.vswitch.datainjection.device;
 
-import java.time.Instant;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -11,9 +10,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.EnrollmentCompletionService;
-import com.vswitch.datainjection.device.stream.DeviceStreamIngestionService;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,7 +23,6 @@ class IotMqttIngestionServiceTest {
     @Mock private DeviceFacade deviceFacade;
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
-    @Mock private DeviceStreamIngestionService deviceStreamIngestionService;
 
     private DeviceMqttResponseTracker responseTracker;
     private IotMqttIngestionService service;
@@ -37,8 +35,6 @@ class IotMqttIngestionServiceTest {
                         deviceFacade,
                         enrollmentCompletionService,
                         responseTracker,
-                        liveUpdateBroadcaster,
-                        deviceStreamIngestionService,
                         new ObjectMapper());
     }
 
@@ -78,7 +74,7 @@ class IotMqttIngestionServiceTest {
     }
 
     @Test
-    void thirtyMinuteBucketClearsStreamStateAndBroadcastsRefresh() {
+    void ignoresMqttThirtyMinuteBucket() {
         service.handleEvent(
                 Map.of(
                         "mqttTopic",
@@ -96,9 +92,9 @@ class IotMqttIngestionServiceTest {
                         "valveTargetPercent",
                         100));
 
-        verify(deviceStreamIngestionService).clearLiveTelemetry("WM000001");
-        verify(liveUpdateBroadcaster)
-                .broadcast(eq("k3m9x2a"), org.mockito.ArgumentMatchers.any());
+        verify(deviceFacade, never()).ingest30MinuteBucket(any());
+        verify(liveUpdateBroadcaster, never())
+                .broadcast(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
