@@ -152,6 +152,10 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
             return;
         }
 
+        if ("enrollment_request".equals(envelope.category())) {
+            bindSerial(envelope, session);
+        }
+
         lineRouter.routeEnvelope(envelope, session);
     }
 

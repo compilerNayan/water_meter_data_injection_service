@@ -58,6 +58,27 @@ public class DeviceStreamCommandService {
                 responseTracker.beginAwaitingResponse(requestId);
         sendDownlink(serialNumber, requestId, httpRequest);
 
+        return awaitResponse(requestId, pending, timeout);
+    }
+
+    public DeviceMqttHttpResponse sendHttpCommandOnSession(
+            DeviceStreamSession session, String httpRequest) {
+        return sendHttpCommandOnSession(session, httpRequest, DEFAULT_RESPONSE_TIMEOUT);
+    }
+
+    public DeviceMqttHttpResponse sendHttpCommandOnSession(
+            DeviceStreamSession session, String httpRequest, Duration timeout) {
+        String requestId = newRequestId();
+        CompletableFuture<DeviceMqttHttpResponse> pending =
+                responseTracker.beginAwaitingResponse(requestId);
+        sendDownlink(session, requestId, httpRequest);
+        return awaitResponse(requestId, pending, timeout);
+    }
+
+    private DeviceMqttHttpResponse awaitResponse(
+            String requestId,
+            CompletableFuture<DeviceMqttHttpResponse> pending,
+            Duration timeout) {
         try {
             return pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -87,6 +108,14 @@ public class DeviceStreamCommandService {
                                         new ResponseStatusException(
                                                 HttpStatus.SERVICE_UNAVAILABLE,
                                                 "Device is not connected: " + serialNumber));
+        sendDownlink(session, requestId, httpRequest);
+    }
+
+    public void sendDownlink(DeviceStreamSession session, String requestId, String httpRequest) {
+        if (session == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Device session is not available");
+        }
 
         String line =
                 DeviceStreamDownlinkMessage.toServerMessageLine(

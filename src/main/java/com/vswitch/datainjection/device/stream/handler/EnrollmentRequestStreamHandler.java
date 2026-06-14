@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,14 +18,23 @@ import com.vswitch.datainjection.DeviceTenantLookupResponse;
 import com.vswitch.datainjection.device.DeviceMqttHttpResponse;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamCommandService;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamHttpRequestBuilder;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.device.stream.protocol.DeviceStreamEnvelope;
 
 import jakarta.annotation.PreDestroy;
 
+/**
+ * Handles device {@code enrollment_request} uplink: resolves tenant from pre-enrollment data,
+ * then calls device {@code EnrollmentNotificationController} over the same TCP session via
+ * {@code POST /deviceenrollment/notify} or {@code POST /deviceenrollment/failure}.
+ */
 @Component
 public class EnrollmentRequestStreamHandler {
 
     private static final Logger log = LoggerFactory.getLogger(EnrollmentRequestStreamHandler.class);
+
+    static final String NOTIFY_PATH = "/deviceenrollment/notify";
+    static final String FAILURE_PATH = "/deviceenrollment/failure";
 
     private final DevicePreEnrollService preEnrollService;
     private final DeviceStreamCommandService commandService;
@@ -41,8 +51,8 @@ public class EnrollmentRequestStreamHandler {
         this.objectMapper = objectMapper;
     }
 
-    public void handle(DeviceStreamEnvelope envelope) {
-        executor.execute(() -> process(envelope));
+    public void handle(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
+        executor.execute(() -> processEnrollment(envelope, session));
     }
 
     @PreDestroy
@@ -50,64 +60,89 @@ public class EnrollmentRequestStreamHandler {
         executor.shutdownNow();
     }
 
-    private void process(DeviceStreamEnvelope envelope) {
+    void processEnrollment(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
         String serialNumber = resolveSerialNumber(envelope);
         if (serialNumber == null) {
             log.warn("Ignoring enrollment_request without serialNumber");
             return;
         }
+        if (session == null) {
+            log.warn("Ignoring enrollment_request for serial={} without TCP session", serialNumber);
+            return;
+        }
 
         log.info("Processing enrollment_request for serial={}", serialNumber);
 
+        DeviceTenantLookupResponse lookup;
         try {
-            DeviceTenantLookupResponse lookup = preEnrollService.lookupTenantBySerial(serialNumber);
+            lookup = preEnrollService.lookupTenantBySerial(serialNumber);
+        } catch (ResponseStatusException ex) {
+            log.warn(
+                    "Tenant lookup failed for serial={}: {}",
+                    serialNumber,
+                    ex.getReason() != null ? ex.getReason() : ex.getMessage());
+            notifyEnrollmentFailure(session, serialNumber, ex);
+            return;
+        }
+
+        notifyEnrollmentSuccess(session, envelope, lookup, serialNumber);
+    }
+
+    private void notifyEnrollmentSuccess(
+            DeviceStreamSession session,
+            DeviceStreamEnvelope envelope,
+            DeviceTenantLookupResponse lookup,
+            String serialNumber) {
+        try {
             String notifyBody = buildNotifyBody(envelope, lookup, serialNumber);
-            String httpRequest =
-                    DeviceStreamHttpRequestBuilder.buildPost("/deviceenrollment/notify", notifyBody);
+            String httpRequest = DeviceStreamHttpRequestBuilder.buildPost(NOTIFY_PATH, notifyBody);
             DeviceMqttHttpResponse response =
-                    commandService.sendHttpCommandAndAwaitResponse(serialNumber, httpRequest);
+                    commandService.sendHttpCommandOnSession(session, httpRequest);
 
             log.info(
                     "Enrollment notify response for serial={}: status={} body={}",
                     serialNumber,
                     response.statusCode(),
                     response.body());
-        } catch (ResponseStatusException ex) {
-            log.warn(
-                    "Enrollment failed for serial={}: {}",
-                    serialNumber,
-                    ex.getReason() != null ? ex.getReason() : ex.getMessage());
-            notifyFailure(serialNumber, ex);
         } catch (Exception ex) {
-            log.error("Unexpected enrollment error for serial={}", serialNumber, ex);
-            notifyFailure(serialNumber, ex.getMessage(), "ENROLLMENT_ERROR");
+            log.error(
+                    "Failed to notify device of enrollment success for serial={}",
+                    serialNumber,
+                    ex);
         }
     }
 
-    private void notifyFailure(String serialNumber, ResponseStatusException ex) {
+    private void notifyEnrollmentFailure(
+            DeviceStreamSession session, String serialNumber, ResponseStatusException ex) {
         String reason = ex.getReason() != null ? ex.getReason() : ex.getMessage();
-        String code = ex.getStatusCode().value() == 404 ? "TENANT_NOT_FOUND" : "ENROLLMENT_FAILED";
-        notifyFailure(serialNumber, reason, code);
+        String code =
+                ex.getStatusCode().value() == HttpStatus.NOT_FOUND.value()
+                        ? "TENANT_NOT_FOUND"
+                        : "ENROLLMENT_FAILED";
+        notifyEnrollmentFailure(session, serialNumber, reason, code);
     }
 
-    private void notifyFailure(String serialNumber, String reason, String code) {
+    private void notifyEnrollmentFailure(
+            DeviceStreamSession session, String serialNumber, String reason, String code) {
         try {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("serialNumber", serialNumber);
             body.put("reason", reason);
             body.put("code", code);
             String json = objectMapper.writeValueAsString(body);
-            String httpRequest =
-                    DeviceStreamHttpRequestBuilder.buildPost("/deviceenrollment/failure", json);
+            String httpRequest = DeviceStreamHttpRequestBuilder.buildPost(FAILURE_PATH, json);
             DeviceMqttHttpResponse response =
-                    commandService.sendHttpCommandAndAwaitResponse(serialNumber, httpRequest);
+                    commandService.sendHttpCommandOnSession(session, httpRequest);
             log.info(
                     "Enrollment failure notify response for serial={}: status={} body={}",
                     serialNumber,
                     response.statusCode(),
                     response.body());
         } catch (Exception ex) {
-            log.warn("Failed to notify device of enrollment failure for serial={}", serialNumber, ex);
+            log.warn(
+                    "Failed to notify device of enrollment failure for serial={}",
+                    serialNumber,
+                    ex);
         }
     }
 

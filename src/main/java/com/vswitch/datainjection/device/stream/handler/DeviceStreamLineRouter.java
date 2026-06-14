@@ -39,7 +39,7 @@ public class DeviceStreamLineRouter {
 
         switch (category) {
             case "device_message" -> handleDeviceMessage(envelope);
-            case "enrollment_request" -> enrollmentRequestHandler.handle(envelope);
+            case "enrollment_request" -> enrollmentRequestHandler.handle(envelope, session);
             case "water_pulse", "log", "water_30m", "lifecycle_enrolled" -> {
                 // handled elsewhere or ignored for now
             }
