@@ -2,8 +2,6 @@ package com.vswitch.datainjection.device.stream.handler;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,8 +19,6 @@ import com.vswitch.datainjection.device.stream.command.DeviceStreamHttpRequestBu
 import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.device.stream.protocol.DeviceStreamEnvelope;
 
-import jakarta.annotation.PreDestroy;
-
 /**
  * Handles device {@code enrollment_request} uplink: resolves tenant from pre-enrollment data,
  * then calls device {@code EnrollmentNotificationController} over the same TCP session via
@@ -39,8 +35,6 @@ public class EnrollmentRequestStreamHandler {
     private final DevicePreEnrollService preEnrollService;
     private final DeviceStreamCommandService commandService;
     private final ObjectMapper objectMapper;
-    private final ExecutorService executor =
-            Executors.newCachedThreadPool(r -> new Thread(r, "enrollment-stream-handler"));
 
     EnrollmentRequestStreamHandler(
             DevicePreEnrollService preEnrollService,
@@ -52,12 +46,8 @@ public class EnrollmentRequestStreamHandler {
     }
 
     public void handle(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
-        executor.execute(() -> processEnrollment(envelope, session));
-    }
-
-    @PreDestroy
-    void shutdown() {
-        executor.shutdownNow();
+        // Run on the TCP reader thread so the downlink is sent before the device can drop.
+        processEnrollment(envelope, session);
     }
 
     void processEnrollment(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
