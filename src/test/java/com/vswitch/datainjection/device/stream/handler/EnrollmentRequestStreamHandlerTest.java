@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.StringWriter;
-import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,7 +21,6 @@ import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.DevicePreEnrollService;
 import com.vswitch.datainjection.DeviceTenantLookupResponse;
-import com.vswitch.datainjection.device.DeviceMqttHttpResponse;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamCommandService;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.device.stream.protocol.DeviceStreamEnvelope;
@@ -52,18 +50,18 @@ class EnrollmentRequestStreamHandlerTest {
         DeviceStreamEnvelope envelope = parseEnrollmentEnvelope("WM001");
         when(preEnrollService.lookupTenantBySerial("WM001"))
                 .thenReturn(new DeviceTenantLookupResponse("WM001", "tenant-abc"));
-        when(commandService.sendHttpCommandOnSession(eq(session), any(String.class)))
-                .thenReturn(new DeviceMqttHttpResponse(200, Map.of("enrolled", true)));
 
         handler.processEnrollment(envelope, session);
 
         ArgumentCaptor<String> httpCaptor = ArgumentCaptor.forClass(String.class);
-        verify(commandService).sendHttpCommandOnSession(eq(session), httpCaptor.capture());
+        verify(commandService).sendHttpDownlinkOnSession(eq(session), httpCaptor.capture());
         String http = httpCaptor.getValue();
         assertTrue(http.startsWith("POST /deviceenrollment/notify HTTP/1.1\r\n"));
         assertTrue(http.contains("\"tenantId\":\"tenant-abc\""));
         assertTrue(http.contains("\"serialNumber\":\"WM001\""));
-        verify(commandService, never()).sendHttpCommandOnSession(eq(session), org.mockito.ArgumentMatchers.contains("/failure"));
+        verify(commandService, never())
+                .sendHttpDownlinkOnSession(
+                        eq(session), org.mockito.ArgumentMatchers.contains("/failure"));
     }
 
     @Test
@@ -73,13 +71,11 @@ class EnrollmentRequestStreamHandlerTest {
                 .thenThrow(
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND, "Serial number not found"));
-        when(commandService.sendHttpCommandOnSession(eq(session), any(String.class)))
-                .thenReturn(new DeviceMqttHttpResponse(200, Map.of("acknowledged", true)));
 
         handler.processEnrollment(envelope, session);
 
         ArgumentCaptor<String> httpCaptor = ArgumentCaptor.forClass(String.class);
-        verify(commandService).sendHttpCommandOnSession(eq(session), httpCaptor.capture());
+        verify(commandService).sendHttpDownlinkOnSession(eq(session), httpCaptor.capture());
         String http = httpCaptor.getValue();
         assertTrue(http.startsWith("POST /deviceenrollment/failure HTTP/1.1\r\n"));
         assertTrue(http.contains("\"serialNumber\":\"WM404\""));
@@ -98,7 +94,7 @@ class EnrollmentRequestStreamHandlerTest {
         handler.processEnrollment(envelope, session);
 
         verify(preEnrollService, never()).lookupTenantBySerial(any());
-        verify(commandService, never()).sendHttpCommandOnSession(any(), any());
+        verify(commandService, never()).sendHttpDownlinkOnSession(any(), any());
     }
 
     private DeviceStreamEnvelope parseEnrollmentEnvelope(String serialNumber) {

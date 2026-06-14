@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vswitch.datainjection.DevicePreEnrollService;
 import com.vswitch.datainjection.DeviceTenantLookupResponse;
-import com.vswitch.datainjection.device.DeviceMqttHttpResponse;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamCommandService;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamHttpRequestBuilder;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
@@ -86,14 +85,8 @@ public class EnrollmentRequestStreamHandler {
         try {
             String notifyBody = buildNotifyBody(envelope, lookup, serialNumber);
             String httpRequest = DeviceStreamHttpRequestBuilder.buildPost(NOTIFY_PATH, notifyBody);
-            DeviceMqttHttpResponse response =
-                    commandService.sendHttpCommandOnSession(session, httpRequest);
-
-            log.info(
-                    "Enrollment notify response for serial={}: status={} body={}",
-                    serialNumber,
-                    response.statusCode(),
-                    response.body());
+            commandService.sendHttpDownlinkOnSession(session, httpRequest);
+            log.info("Enrollment notify downlink sent for serial={}", serialNumber);
         } catch (Exception ex) {
             log.error(
                     "Failed to notify device of enrollment success for serial={}",
@@ -121,13 +114,8 @@ public class EnrollmentRequestStreamHandler {
             body.put("code", code);
             String json = objectMapper.writeValueAsString(body);
             String httpRequest = DeviceStreamHttpRequestBuilder.buildPost(FAILURE_PATH, json);
-            DeviceMqttHttpResponse response =
-                    commandService.sendHttpCommandOnSession(session, httpRequest);
-            log.info(
-                    "Enrollment failure notify response for serial={}: status={} body={}",
-                    serialNumber,
-                    response.statusCode(),
-                    response.body());
+            commandService.sendHttpDownlinkOnSession(session, httpRequest);
+            log.info("Enrollment failure downlink sent for serial={}", serialNumber);
         } catch (Exception ex) {
             log.warn(
                     "Failed to notify device of enrollment failure for serial={}",

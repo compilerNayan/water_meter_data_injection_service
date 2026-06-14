@@ -111,6 +111,10 @@ public class DeviceStreamCommandService {
         sendDownlink(session, requestId, httpRequest);
     }
 
+    public void sendHttpDownlinkOnSession(DeviceStreamSession session, String httpRequest) {
+        sendDownlink(session, newRequestId(), httpRequest);
+    }
+
     public void sendDownlink(DeviceStreamSession session, String requestId, String httpRequest) {
         if (session == null) {
             throw new ResponseStatusException(
