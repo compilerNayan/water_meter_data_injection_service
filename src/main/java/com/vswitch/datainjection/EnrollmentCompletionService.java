@@ -84,7 +84,7 @@ public class EnrollmentCompletionService {
     private static void validatePreEnroll(DevicePreEnrollRecord preEnroll, String tenantId) {
         if (!tenantId.equals(preEnroll.tenantId())) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "Pre-enroll tenant does not match MQTT payload");
+                    HttpStatus.CONFLICT, "Pre-enroll tenant does not match enrollment payload");
         }
         if (PreEnrollRepository.STATUS_ENROLLED.equals(preEnroll.status())) {
             return;

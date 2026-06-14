@@ -18,14 +18,17 @@ public class DeviceStreamLineRouter {
     private final DeviceStreamConnectionRegistry connectionRegistry;
     private final DeviceStreamCommandService commandService;
     private final EnrollmentRequestStreamHandler enrollmentRequestHandler;
+    private final LifecycleEnrolledStreamHandler lifecycleEnrolledStreamHandler;
 
     DeviceStreamLineRouter(
             DeviceStreamConnectionRegistry connectionRegistry,
             DeviceStreamCommandService commandService,
-            EnrollmentRequestStreamHandler enrollmentRequestHandler) {
+            EnrollmentRequestStreamHandler enrollmentRequestHandler,
+            LifecycleEnrolledStreamHandler lifecycleEnrolledStreamHandler) {
         this.connectionRegistry = connectionRegistry;
         this.commandService = commandService;
         this.enrollmentRequestHandler = enrollmentRequestHandler;
+        this.lifecycleEnrolledStreamHandler = lifecycleEnrolledStreamHandler;
     }
 
     public void routeEnvelope(DeviceStreamEnvelope envelope, DeviceStreamSession session) {
@@ -40,7 +43,8 @@ public class DeviceStreamLineRouter {
         switch (category) {
             case "device_message" -> handleDeviceMessage(envelope);
             case "enrollment_request" -> enrollmentRequestHandler.handle(envelope, session);
-            case "water_pulse", "log", "water_30m", "lifecycle_enrolled" -> {
+            case "lifecycle_enrolled" -> lifecycleEnrolledStreamHandler.handle(envelope);
+            case "water_pulse", "log", "water_30m" -> {
                 // handled elsewhere or ignored for now
             }
             default -> log.debug("Unhandled stream category {} from {}", category, envelope.serialNumber());
