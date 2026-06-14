@@ -25,9 +25,16 @@ public class SecurityConfig {
                                                 "/actuator/health",
                                                 "/actuator/info",
                                                 "/api/test-data/**",
-                                                "/ws/live")
+                                                "/ws/live",
+                                                "/stream/**",
+                                                "/devices/*/tenant")
                                         .permitAll()
-                                        .requestMatchers("/api/**")
+                                .requestMatchers(
+                                                "/users/**",
+                                                "/tenants/**",
+                                                "/v2/users/**",
+                                                "/v2/tenants/**",
+                                                "/api/**")
                                         .authenticated()
                                         .anyRequest()
                                         .permitAll())
