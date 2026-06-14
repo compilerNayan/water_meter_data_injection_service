@@ -1,0 +1,78 @@
+package com.vswitch.datainjection;
+
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import com.vswitch.datainjection.device.DeviceMqttHttpResponse;
+import com.vswitch.datainjection.device.stream.DeviceStreamValveService;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class StreamValveControllerTest {
+
+    @Autowired private MockMvc mockMvc;
+
+    @MockBean private DeviceStreamValveService deviceStreamValveService;
+
+    @Test
+    void getValveReturnsDeviceResponseWithoutAuth() throws Exception {
+        when(deviceStreamValveService.getValveState("WM000001"))
+                .thenReturn(
+                        new DeviceMqttHttpResponse(
+                                200,
+                                Map.of(
+                                        "targetPressurePercent", 80,
+                                        "actualPressurePercent", 78)));
+
+        mockMvc.perform(get("/stream/devices/WM000001/valve"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetPressurePercent").value(80))
+                .andExpect(jsonPath("$.actualPressurePercent").value(78));
+
+        verify(deviceStreamValveService).getValveState("WM000001");
+    }
+
+    @Test
+    void putValveForwardsPressurePercentToDevice() throws Exception {
+        when(deviceStreamValveService.setValveState(eq("WM000001"), eq(new ValveSetRequest(50))))
+                .thenReturn(
+                        new DeviceMqttHttpResponse(
+                                200,
+                                Map.of(
+                                        "targetPressurePercent", 50,
+                                        "actualPressurePercent", 50)));
+
+        mockMvc.perform(
+                        put("/stream/devices/WM000001/valve")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"pressurePercent\":50}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetPressurePercent").value(50));
+
+        verify(deviceStreamValveService).setValveState("WM000001", new ValveSetRequest(50));
+    }
+
+    @Test
+    void putValveRequiresPressurePercent() throws Exception {
+        mockMvc.perform(
+                        put("/stream/devices/WM000001/valve")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+}
