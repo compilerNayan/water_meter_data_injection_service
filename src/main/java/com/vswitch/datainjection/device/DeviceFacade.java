@@ -40,6 +40,8 @@ public interface DeviceFacade {
 
     boolean hasDayHistory(String deviceId, LocalDate date);
 
+    boolean hasTodaySlots(String deviceId, LocalDate date);
+
     void applyHistoricalCumulative(String deviceId, double additionalLiters, Instant lastHour);
 
     CurrentReadingResponse getCurrentReading(String deviceId);

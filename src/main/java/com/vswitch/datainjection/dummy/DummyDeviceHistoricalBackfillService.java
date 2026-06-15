@@ -3,7 +3,11 @@ package com.vswitch.datainjection.dummy;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.slf4j.Logger;
@@ -16,11 +20,15 @@ import com.vswitch.datainjection.DayHistoryRecord;
 import com.vswitch.datainjection.MinuteVolumeCsv;
 import com.vswitch.datainjection.MockDeviceProfileFactory;
 import com.vswitch.datainjection.device.DeviceFacade;
+import com.vswitch.datainjection.device.MinuteBucketEntry;
+import com.vswitch.datainjection.device.ThirtyMinuteBucketPayload;
 
 /**
  * Seeds {@link DayHistoryRecord} with the last N days of synthetic usage when a dummy device is
  * enrolled. Each day stores {@link MinuteVolumeCsv#MINUTES_PER_DAY} minute-level milliliter
- * buckets (1440 per day); daily totals are randomized between 600 L and 1400 L.
+ * buckets (1440 per day); daily totals are randomized between 600 L and 1400 L. Also seeds
+ * today's {@link com.vswitch.datainjection.device.TodaySlotRecord} rows for every completed
+ * 30-minute period from midnight through the last finished bucket.
  */
 @Service
 public class DummyDeviceHistoricalBackfillService {
@@ -77,12 +85,28 @@ public class DummyDeviceHistoricalBackfillService {
     }
 
     void backfillIfNeeded(String tenantId, String deviceId) {
-        LocalDate oldestDay = LocalDate.now(ZoneOffset.UTC).minusDays(backfillDays);
-        if (deviceFacade.hasDayHistory(deviceId, oldestDay)) {
-            log.debug("Dummy history already present for device {}", deviceId);
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate oldestDay = today.minusDays(backfillDays);
+        boolean needsHistory = !deviceFacade.hasDayHistory(deviceId, oldestDay);
+        boolean needsToday = !deviceFacade.hasTodaySlots(deviceId, today);
+
+        if (!needsHistory && !needsToday) {
+            log.debug("Dummy backfill already complete for device {}", deviceId);
             return;
         }
 
+        if (needsHistory) {
+            backfillHistory(tenantId, deviceId);
+        }
+
+        if (needsToday) {
+            double startingCumulative =
+                    deviceFacade.getCurrentReading(deviceId).cumulativeLiters();
+            backfillTodaySlots(tenantId, deviceId, startingCumulative, Instant.now());
+        }
+    }
+
+    private void backfillHistory(String tenantId, String deviceId) {
         log.info(
                 "Backfilling {} days of dummy history for device {}/{}",
                 backfillDays,
@@ -126,6 +150,68 @@ public class DummyDeviceHistoricalBackfillService {
                 deviceId,
                 totalHistoricalLiters,
                 backfillDays);
+    }
+
+    void backfillTodaySlots(
+            String tenantId, String deviceId, double startingCumulative, Instant now) {
+        ZonedDateTime nowUtc = now.atZone(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
+        LocalDate today = nowUtc.toLocalDate();
+        ZonedDateTime dayStart = today.atStartOfDay(ZoneOffset.UTC);
+        ZonedDateTime lastCompletedPeriodStart = lastCompletedPeriodStart(nowUtc);
+
+        if (lastCompletedPeriodStart.isBefore(dayStart)) {
+            log.debug("No completed 30-minute buckets yet today for device {}", deviceId);
+            return;
+        }
+
+        double dailyTarget = dailyTargetLiters(deviceId, today);
+        int[] dayMilliliters = minuteVolumesForDay(deviceId, today, dailyTarget);
+        double cumulative = startingCumulative;
+        int bucketCount = 0;
+
+        for (ZonedDateTime periodStart = dayStart;
+                !periodStart.isAfter(lastCompletedPeriodStart);
+                periodStart = periodStart.plusMinutes(DummyTelemetryPolicy.MINUTES_PER_BUCKET)) {
+            int startMinuteOfDay = (int) ChronoUnit.MINUTES.between(dayStart, periodStart);
+            List<MinuteBucketEntry> minutes = new ArrayList<>(DummyTelemetryPolicy.MINUTES_PER_BUCKET);
+            double bucketLiters = 0;
+
+            for (int i = 0; i < DummyTelemetryPolicy.MINUTES_PER_BUCKET; i++) {
+                int ml = dayMilliliters[startMinuteOfDay + i];
+                bucketLiters += ml / 1000.0;
+                minutes.add(new MinuteBucketEntry(periodStart.plusMinutes(i).toInstant(), ml));
+            }
+
+            cumulative += bucketLiters;
+            deviceFacade.ingest30MinuteBucket(
+                    new ThirtyMinuteBucketPayload(
+                            tenantId,
+                            deviceId,
+                            periodStart.toInstant(),
+                            minutes,
+                            cumulative,
+                            DummyTelemetryPolicy.DEFAULT_VALVE_TARGET_PERCENT));
+            bucketCount++;
+        }
+
+        log.info(
+                "Finished today's dummy slot backfill for {}/{} ({} buckets through {})",
+                tenantId,
+                deviceId,
+                bucketCount,
+                lastCompletedPeriodStart);
+    }
+
+    static ZonedDateTime lastCompletedPeriodStart(ZonedDateTime nowUtc) {
+        ZonedDateTime currentPeriodStart = alignPeriodStart(nowUtc);
+        return currentPeriodStart.minusMinutes(DummyTelemetryPolicy.MINUTES_PER_BUCKET);
+    }
+
+    private static ZonedDateTime alignPeriodStart(ZonedDateTime timeUtc) {
+        int alignedMinute =
+                (timeUtc.getMinute() / DummyTelemetryPolicy.MINUTES_PER_BUCKET)
+                        * DummyTelemetryPolicy.MINUTES_PER_BUCKET;
+        return timeUtc.withMinute(alignedMinute).withSecond(0).withNano(0);
     }
 
     double dailyTargetLiters(String deviceId, LocalDate date) {

@@ -264,6 +264,11 @@ public class DynamoDbDeviceFacade implements DeviceFacade {
     }
 
     @Override
+    public boolean hasTodaySlots(String deviceId, LocalDate date) {
+        return deviceStore.hasTodaySlots(deviceId, date);
+    }
+
+    @Override
     public void applyHistoricalCumulative(
             String deviceId, double additionalLiters, Instant lastHour) {
         deviceStore.applyHistoricalCumulative(deviceId, additionalLiters, lastHour);

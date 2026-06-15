@@ -103,6 +103,10 @@ public class DeviceStore {
                         .build());
     }
 
+    public boolean hasTodaySlots(String deviceId, LocalDate localDate) {
+        return !queryTodaySlotsByLocalDate(deviceId, formatDate(localDate)).isEmpty();
+    }
+
     public List<TodaySlotRecord> queryTodaySlotsByLocalDate(String deviceId, String localDate) {
         List<TodaySlotRecord> records = new ArrayList<>();
         Map<String, AttributeValue> exclusiveStartKey = null;
