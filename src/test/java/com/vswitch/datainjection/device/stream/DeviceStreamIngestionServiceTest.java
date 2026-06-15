@@ -1,6 +1,9 @@
 package com.vswitch.datainjection.device.stream;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,13 +29,20 @@ class DeviceStreamIngestionServiceTest {
 
     private DeviceLiveTelemetryStore store;
     private DevicePresenceService presenceService;
+    private WaterFlowLiveBroadcastGate broadcastGate;
     private DeviceStreamIngestionService service;
 
     @BeforeEach
     void setUp() {
         store = new DeviceLiveTelemetryStore();
         presenceService = new DevicePresenceService(liveUpdateBroadcaster, deviceFacade);
-        service = new DeviceStreamIngestionService(store, liveUpdateBroadcaster, presenceService);
+        broadcastGate =
+                new WaterFlowLiveBroadcastGate(
+                        liveUpdateBroadcaster,
+                        Clock.fixed(Instant.parse("2026-06-13T10:00:05Z"), ZoneOffset.UTC),
+                        Executors.newSingleThreadScheduledExecutor());
+        service =
+                new DeviceStreamIngestionService(store, presenceService, broadcastGate);
     }
 
     @Test
@@ -49,6 +59,8 @@ class DeviceStreamIngestionServiceTest {
         assertEquals(45, snapshot.ml());
         assertEquals(123.456, snapshot.cumulativeLiters(), 0.001);
         assertEquals(2.7, snapshot.flowRateLpm(), 0.001);
+
+        broadcastGate.flushNowForTests("QJPDXN094");
 
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
         verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
@@ -78,7 +90,7 @@ class DeviceStreamIngestionServiceTest {
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
         verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), captor.capture());
         assertEquals(LiveUpdateMessage.TYPE_DEVICE_PRESENCE, captor.getValue().type());
-        verify(liveUpdateBroadcaster, org.mockito.Mockito.never())
+        verify(liveUpdateBroadcaster, never())
                 .broadcast(
                         eq("63tk0y1"),
                         org.mockito.ArgumentMatchers.argThat(
