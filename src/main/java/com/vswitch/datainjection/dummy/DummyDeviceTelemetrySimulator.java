@@ -86,7 +86,13 @@ public class DummyDeviceTelemetrySimulator {
             return;
         }
         lastRegistryRefresh = now;
-        List<DummyDeviceRecord> devices = dummyDeviceRepository.listAll();
+        List<DummyDeviceRecord> devices;
+        try {
+            devices = dummyDeviceRepository.listAll();
+        } catch (Exception e) {
+            log.warn("Dummy telemetry registry refresh failed: {}", e.toString());
+            return;
+        }
         Map<String, DummyDeviceTelemetrySession> next = new ConcurrentHashMap<>();
         for (DummyDeviceRecord device : devices) {
             String key = device.deviceKey();

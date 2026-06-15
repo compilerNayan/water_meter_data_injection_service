@@ -104,7 +104,9 @@ Your app reads/writes the same DynamoDB tables as `water_meter_service`. The **s
         "dynamodb:GetItem",
         "dynamodb:PutItem",
         "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
         "dynamodb:Query",
+        "dynamodb:Scan",
         "dynamodb:BatchWriteItem",
         "dynamodb:DescribeTable"
       ],
@@ -119,6 +121,40 @@ Your app reads/writes the same DynamoDB tables as `water_meter_service`. The **s
 6. Click **Create policy**
 
 Done — the running app can now access your water meter tables.
+
+If you already created `WaterMeterDynamoDbAccess` earlier, **edit** that inline policy on `aws-elasticbeanstalk-ec2-role` and add `dynamodb:Scan` and `dynamodb:DeleteItem` (required for dummy-device telemetry, tenant wipe, and deleting device history).
+
+### Step 7b — Dummy devices table (for bulk dummy enroll + telemetry)
+
+1. Go to **DynamoDB → Tables → Create table**
+2. **Table name:** `WaterMeterDummyDevices`
+3. **Partition key:** `deviceKey` (String)
+4. Create the table (on-demand billing is fine)
+
+### Step 7c — Cognito permissions (for tenant wipe / delete user)
+
+On the same `aws-elasticbeanstalk-ec2-role`, add another inline policy (or extend the existing one):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:ListUsers"
+      ],
+      "Resource": "arn:aws:cognito-idp:ap-south-1:748359027058:userpool/ap-south-1_vm19Xv95r"
+    }
+  ]
+}
+```
+
+Policy name suggestion: `WaterMeterCognitoUserDeletion`
+
+No app redeploy is needed after IAM changes — they apply to the running EC2 instance within a minute or two.
 
 ---
 
@@ -311,6 +347,7 @@ GitHub rebuilds and redeploys automatically. Wait for the green check in **Actio
 | GitHub Action: **Region not specified** | Fixed in workflow — push latest code (uses `region`, not `aws_region`) |
 | Browser shows old sample app | Wait for deploy to finish; in Beanstalk console check **Health** is green |
 | `/actuator/health` shows dynamodb **DOWN** | Do Part 2 again (Step 7) — EC2 role missing DynamoDB policy |
+| Tenant wipe returns **500** / logs show `not authorized to perform: dynamodb:Scan` on `WaterMeterDummyDevices` | Edit `WaterMeterDynamoDbAccess` on `aws-elasticbeanstalk-ec2-role` — add `dynamodb:Scan` and `dynamodb:DeleteItem` (Step 7). Create table `WaterMeterDummyDevices` if missing (Step 7b) |
 | Beanstalk health **Severe** | Beanstalk → your environment → **Logs** → **Request Logs** → **Last 100 Lines** |
 | Browser shows **502 Bad Gateway** | App must listen on port **5000** on Beanstalk (fixed in `Procfile`); push latest code and redeploy |
 
