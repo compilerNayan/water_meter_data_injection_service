@@ -25,9 +25,6 @@ import com.vswitch.datainjection.device.DeviceFacade;
 @Service
 public class DummyDeviceHistoricalBackfillService {
 
-    static final double MIN_DAILY_LITERS = 600.0;
-    static final double MAX_DAILY_LITERS = 1400.0;
-
     private static final Logger log =
             LoggerFactory.getLogger(DummyDeviceHistoricalBackfillService.class);
 
@@ -37,6 +34,8 @@ public class DummyDeviceHistoricalBackfillService {
     private final int backfillDays;
     private final long historyTtlSeconds;
     private final boolean enabled;
+    private final double minDailyLiters;
+    private final double maxDailyLiters;
 
     DummyDeviceHistoricalBackfillService(
             DeviceFacade deviceFacade,
@@ -44,13 +43,17 @@ public class DummyDeviceHistoricalBackfillService {
             @Qualifier("dummyDeviceBackfillExecutor") ExecutorService dummyDeviceBackfillExecutor,
             @Value("${dummy.history.backfill.days:30}") int backfillDays,
             @Value("${day.history.ttl.days:400}") int historyTtlDays,
-            @Value("${dummy.history.backfill.enabled:true}") boolean enabled) {
+            @Value("${dummy.history.backfill.enabled:true}") boolean enabled,
+            @Value("${dummy.history.backfill.daily.min-liters:600}") double minDailyLiters,
+            @Value("${dummy.history.backfill.daily.max-liters:1400}") double maxDailyLiters) {
         this.deviceFacade = deviceFacade;
         this.profileFactory = profileFactory;
         this.backfillExecutor = dummyDeviceBackfillExecutor;
         this.backfillDays = Math.max(1, backfillDays);
         this.historyTtlSeconds = Math.max(30L, historyTtlDays) * 24 * 3600;
         this.enabled = enabled;
+        this.minDailyLiters = Math.min(minDailyLiters, maxDailyLiters);
+        this.maxDailyLiters = Math.max(minDailyLiters, maxDailyLiters);
     }
 
     public void scheduleBackfill(String tenantId, String deviceId) {
@@ -125,10 +128,16 @@ public class DummyDeviceHistoricalBackfillService {
                 backfillDays);
     }
 
-    static double dailyTargetLiters(String deviceId, LocalDate date) {
-        int mixed = deviceId.hashCode() ^ date.hashCode();
-        int span = (int) Math.round(MAX_DAILY_LITERS - MIN_DAILY_LITERS);
-        return MIN_DAILY_LITERS + (Math.abs(mixed) % (span + 1));
+    double dailyTargetLiters(String deviceId, LocalDate date) {
+        long seed =
+                mix64(
+                        ((long) deviceId.hashCode() << 32)
+                                ^ date.toEpochDay()
+                                ^ ((long) date.getDayOfYear() << 16)
+                                ^ deviceId.length());
+        double unit = Long.remainderUnsigned(seed, 1_000_000L) / 1_000_000.0;
+        double raw = minDailyLiters + unit * (maxDailyLiters - minDailyLiters);
+        return Math.round(raw * 10.0) / 10.0;
     }
 
     private int[] minuteVolumesForDay(String deviceId, LocalDate date, double dailyTarget) {
@@ -144,7 +153,32 @@ public class DummyDeviceHistoricalBackfillService {
                 milliliters[start + minute] = (int) Math.round(perMinute * noise * 1000);
             }
         }
+        return scaleToTargetLiters(milliliters, dailyTarget);
+    }
+
+    private static int[] scaleToTargetLiters(int[] milliliters, double dailyTarget) {
+        double sumLiters = MinuteVolumeCsv.sumLiters(milliliters);
+        if (sumLiters <= 0) {
+            return milliliters;
+        }
+        double factor = dailyTarget / sumLiters;
+        int targetMl = (int) Math.round(dailyTarget * 1000);
+        int runningMl = 0;
+        for (int i = 0; i < milliliters.length; i++) {
+            if (i == milliliters.length - 1) {
+                milliliters[i] = Math.max(0, targetMl - runningMl);
+            } else {
+                milliliters[i] = Math.max(0, (int) Math.round(milliliters[i] * factor));
+                runningMl += milliliters[i];
+            }
+        }
         return milliliters;
+    }
+
+    private static long mix64(long z) {
+        z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
+        z = (z ^ (z >>> 27)) * 0x94d049bb133111ebL;
+        return z ^ (z >>> 31);
     }
 
     private double[] hourlyVolumesForDay(String deviceId, LocalDate date, double dailyTarget) {

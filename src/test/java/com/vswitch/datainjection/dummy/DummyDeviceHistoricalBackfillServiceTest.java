@@ -41,7 +41,9 @@ class DummyDeviceHistoricalBackfillServiceTest {
                         backfillExecutor,
                         1,
                         400,
-                        true);
+                        true,
+                        600,
+                        1400);
     }
 
     @Test
@@ -49,12 +51,27 @@ class DummyDeviceHistoricalBackfillServiceTest {
         LocalDate dayA = LocalDate.parse("2026-06-01");
         LocalDate dayB = LocalDate.parse("2026-06-02");
 
-        double litersA = DummyDeviceHistoricalBackfillService.dailyTargetLiters("WM001", dayA);
-        double litersB = DummyDeviceHistoricalBackfillService.dailyTargetLiters("WM001", dayB);
+        double litersA = service.dailyTargetLiters("WM001", dayA);
+        double litersB = service.dailyTargetLiters("WM001", dayB);
 
         assertTrue(litersA >= 600 && litersA <= 1400);
         assertTrue(litersB >= 600 && litersB <= 1400);
         assertTrue(litersA != litersB);
+    }
+
+    @Test
+    void dailyTargetLitersSpansWideRangeOverMonth() {
+        LocalDate start = LocalDate.parse("2026-05-01");
+        double min = Double.MAX_VALUE;
+        double max = 0;
+        for (int i = 0; i < 30; i++) {
+            double liters = service.dailyTargetLiters("AS146", start.plusDays(i));
+            min = Math.min(min, liters);
+            max = Math.max(max, liters);
+        }
+        assertTrue(min >= 600);
+        assertTrue(max <= 1400);
+        assertTrue(max - min >= 400, "expected wide day-to-day spread, got " + (max - min));
     }
 
     @Test
@@ -68,7 +85,7 @@ class DummyDeviceHistoricalBackfillServiceTest {
         verify(deviceFacade).applyHistoricalCumulative(eq("WM010"), any(Double.class), any(Instant.class));
 
         LocalDate date = LocalDate.now(java.time.ZoneOffset.UTC).minusDays(1);
-        double target = DummyDeviceHistoricalBackfillService.dailyTargetLiters("WM010", date);
+        double target = service.dailyTargetLiters("WM010", date);
 
         DayHistoryRecord record = captor.getValue();
         assertEquals("WM010", record.deviceId());
@@ -76,7 +93,7 @@ class DummyDeviceHistoricalBackfillServiceTest {
         assertEquals(MinuteVolumeCsv.MINUTES_PER_DAY, MinuteVolumeCsv.decodeMl(record.vCsv()).length);
 
         double total = record.totalLiters();
-        assertTrue(total >= target * 0.8 && total <= target * 1.2);
+        assertTrue(total >= target * 0.99 && total <= target * 1.01);
     }
 
     @Test
