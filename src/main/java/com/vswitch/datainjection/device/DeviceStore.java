@@ -18,6 +18,7 @@ import com.vswitch.datainjection.MockDeviceProfile;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
@@ -210,6 +211,99 @@ public class DeviceStore {
         } while (exclusiveStartKey != null && !exclusiveStartKey.isEmpty());
 
         return records;
+    }
+
+    public void deleteAllDeviceData(String deviceId) {
+        deleteDeviceState(deviceId);
+        deleteDeviceConfig(deviceId);
+        deleteAllTodaySlots(deviceId);
+        deleteAllDayHistory(deviceId);
+    }
+
+    void deleteDeviceState(String deviceId) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(deviceStateTable)
+                        .key(
+                                Map.of(
+                                        "deviceId",
+                                        AttributeValue.builder().s(deviceId).build()))
+                        .build());
+    }
+
+    void deleteDeviceConfig(String deviceId) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(deviceConfigTable)
+                        .key(
+                                Map.of(
+                                        "deviceId",
+                                        AttributeValue.builder().s(deviceId).build()))
+                        .build());
+    }
+
+    void deleteAllTodaySlots(String deviceId) {
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        do {
+            QueryRequest.Builder builder =
+                    QueryRequest.builder()
+                            .tableName(todaySlotsTable)
+                            .keyConditionExpression("deviceId = :deviceId")
+                            .expressionAttributeValues(
+                                    Map.of(
+                                            ":deviceId",
+                                            AttributeValue.builder().s(deviceId).build()));
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                builder.exclusiveStartKey(exclusiveStartKey);
+            }
+            var response = dynamoDbClient.query(builder.build());
+            for (var item : response.items()) {
+                TodaySlotRecord slot = TodaySlotRecord.fromItem(item);
+                dynamoDbClient.deleteItem(
+                        DeleteItemRequest.builder()
+                                .tableName(todaySlotsTable)
+                                .key(
+                                        Map.of(
+                                                "deviceId",
+                                                AttributeValue.builder().s(deviceId).build(),
+                                                "slotKey",
+                                                AttributeValue.builder().s(slot.slotKey()).build()))
+                                .build());
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        } while (exclusiveStartKey != null && !exclusiveStartKey.isEmpty());
+    }
+
+    void deleteAllDayHistory(String deviceId) {
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        do {
+            QueryRequest.Builder builder =
+                    QueryRequest.builder()
+                            .tableName(dayHistoryTable)
+                            .keyConditionExpression("deviceId = :deviceId")
+                            .expressionAttributeValues(
+                                    Map.of(
+                                            ":deviceId",
+                                            AttributeValue.builder().s(deviceId).build()));
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                builder.exclusiveStartKey(exclusiveStartKey);
+            }
+            var response = dynamoDbClient.query(builder.build());
+            for (var item : response.items()) {
+                DayHistoryRecord day = DayHistoryRecord.fromItem(item);
+                dynamoDbClient.deleteItem(
+                        DeleteItemRequest.builder()
+                                .tableName(dayHistoryTable)
+                                .key(
+                                        Map.of(
+                                                "deviceId",
+                                                AttributeValue.builder().s(deviceId).build(),
+                                                "dayKey",
+                                                AttributeValue.builder().s(day.dayKey()).build()))
+                                .build());
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        } while (exclusiveStartKey != null && !exclusiveStartKey.isEmpty());
     }
 
     void applyHistoricalCumulative(String deviceId, double additionalLiters, Instant lastHour) {

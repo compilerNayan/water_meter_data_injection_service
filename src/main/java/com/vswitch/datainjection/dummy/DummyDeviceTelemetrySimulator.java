@@ -74,6 +74,12 @@ public class DummyDeviceTelemetrySimulator {
         }
     }
 
+    public void evictTenant(String tenantId) {
+        sessions.entrySet().removeIf(entry -> tenantId.equals(entry.getValue().tenantId()));
+        lastRegistryRefresh = Instant.EPOCH;
+        log.info("Evicted dummy telemetry sessions for tenant {}", tenantId);
+    }
+
     void refreshSessionsIfNeeded() {
         Instant now = clock.instant();
         if (now.toEpochMilli() - lastRegistryRefresh.toEpochMilli() < registryRefreshMillis) {

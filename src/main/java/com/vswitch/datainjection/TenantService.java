@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -218,6 +219,14 @@ public class TenantService {
                 PutItemRequest.builder()
                         .tableName(tableName)
                         .item(updated.toItem())
+                        .build());
+    }
+
+    void deleteTenant(String tenantId) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(tableName)
+                        .key(Map.of("tenantId", AttributeValue.builder().s(tenantId).build()))
                         .build());
     }
 

@@ -55,6 +55,16 @@ public class WaterFlowLiveBroadcastGate {
         flush(DeviceLiveTelemetryStore.normalizeDeviceId(deviceId));
     }
 
+    public void clearDevice(String deviceId) {
+        String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
+        pendingByDevice.remove(key);
+        lastBroadcastAt.remove(key);
+        ScheduledFuture<?> future = scheduledFlush.remove(key);
+        if (future != null) {
+            future.cancel(false);
+        }
+    }
+
     @PreDestroy
     void shutdown() {
         for (ScheduledFuture<?> future : scheduledFlush.values()) {

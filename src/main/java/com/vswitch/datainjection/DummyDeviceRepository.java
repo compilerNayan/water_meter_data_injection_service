@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -65,5 +66,46 @@ public class DummyDeviceRepository {
             devices.add(DummyDeviceRecord.fromItem(item));
         }
         return devices;
+    }
+
+    List<DummyDeviceRecord> listByTenant(String tenantId) {
+        List<DummyDeviceRecord> devices = new ArrayList<>();
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        do {
+            ScanRequest.Builder builder =
+                    ScanRequest.builder()
+                            .tableName(tableName)
+                            .filterExpression("tenantId = :tenantId")
+                            .expressionAttributeValues(
+                                    Map.of(
+                                            ":tenantId",
+                                            AttributeValue.builder().s(tenantId).build()));
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                builder.exclusiveStartKey(exclusiveStartKey);
+            }
+            var response = dynamoDbClient.scan(builder.build());
+            for (Map<String, AttributeValue> item : response.items()) {
+                devices.add(DummyDeviceRecord.fromItem(item));
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        } while (exclusiveStartKey != null && !exclusiveStartKey.isEmpty());
+        return devices;
+    }
+
+    void delete(String deviceKey) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(tableName)
+                        .key(Map.of("deviceKey", AttributeValue.builder().s(deviceKey).build()))
+                        .build());
+    }
+
+    int deleteAllForTenant(String tenantId) {
+        int deleted = 0;
+        for (DummyDeviceRecord record : listByTenant(tenantId)) {
+            delete(record.deviceKey());
+            deleted++;
+        }
+        return deleted;
     }
 }

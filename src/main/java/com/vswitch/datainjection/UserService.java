@@ -1,6 +1,8 @@
 package com.vswitch.datainjection;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -11,8 +13,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 @Service
 public class UserService {
@@ -114,8 +118,8 @@ public class UserService {
     }
 
     void requireTenantOwner(String userId, String tenantId) {
-        UserRecord user = requireUser(userId);
         requireTenantMember(userId, tenantId);
+        UserRecord user = requireUser(userId);
         if (!user.isTenantOwner()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "Only the tenant owner can perform this action");
@@ -147,6 +151,38 @@ public class UserService {
                 PutItemRequest.builder()
                         .tableName(tableName)
                         .item(updated.toItem())
+                        .build());
+    }
+
+    List<UserRecord> listByTenant(String tenantId) {
+        List<UserRecord> users = new ArrayList<>();
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        do {
+            ScanRequest.Builder builder =
+                    ScanRequest.builder()
+                            .tableName(tableName)
+                            .filterExpression("tenantId = :tenantId")
+                            .expressionAttributeValues(
+                                    Map.of(
+                                            ":tenantId",
+                                            AttributeValue.builder().s(tenantId).build()));
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                builder.exclusiveStartKey(exclusiveStartKey);
+            }
+            var response = dynamoDbClient.scan(builder.build());
+            for (Map<String, AttributeValue> item : response.items()) {
+                users.add(UserRecord.fromItem(item));
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        } while (exclusiveStartKey != null && !exclusiveStartKey.isEmpty());
+        return users;
+    }
+
+    void deleteUser(String userId) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(tableName)
+                        .key(Map.of("userId", AttributeValue.builder().s(userId).build()))
                         .build());
     }
 

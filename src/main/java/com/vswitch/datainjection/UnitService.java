@@ -18,6 +18,7 @@ import com.vswitch.datainjection.device.DeviceFacade;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
@@ -284,6 +285,14 @@ public class UnitService {
             }
         }
         return "";
+    }
+
+    void deleteUnit(String unitId) {
+        dynamoDbClient.deleteItem(
+                DeleteItemRequest.builder()
+                        .tableName(tableName)
+                        .key(Map.of("unitId", AttributeValue.builder().s(unitId).build()))
+                        .build());
     }
 
     Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {
