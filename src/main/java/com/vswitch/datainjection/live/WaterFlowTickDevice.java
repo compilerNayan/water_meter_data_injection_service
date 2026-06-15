@@ -11,4 +11,5 @@ public record WaterFlowTickDevice(
         double flowRateLpm,
         double cumulativeLiters,
         Double todayLiters,
+        Double monthLiters,
         String status) {}

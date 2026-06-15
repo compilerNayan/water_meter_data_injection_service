@@ -1,5 +1,7 @@
 package com.vswitch.datainjection.device.stream;
 
+import static org.mockito.Mockito.when;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -13,6 +15,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
@@ -25,9 +29,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class WaterFlowLiveBroadcastGateTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    @Mock private DeviceMonthPrefixCache monthPrefixCache;
 
     private ScheduledExecutorService scheduler;
     private WaterFlowLiveBroadcastGate gate;
@@ -44,7 +50,13 @@ class WaterFlowLiveBroadcastGateTest {
                             thread.setDaemon(true);
                             return thread;
                         });
-        gate = new WaterFlowLiveBroadcastGate(liveUpdateBroadcaster, clock, scheduler);
+        gate = new WaterFlowLiveBroadcastGate(liveUpdateBroadcaster, monthPrefixCache, clock, scheduler);
+        when(monthPrefixCache.liveMonthLiters(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(
+                        invocation -> {
+                            Double today = invocation.getArgument(1);
+                            return today == null ? 12452.0 : 12452.0 + today;
+                        });
     }
 
     @AfterEach
@@ -71,6 +83,7 @@ class WaterFlowLiveBroadcastGateTest {
         assertEquals("WM001", device.deviceId());
         assertEquals(149, device.cumulativeLiters(), 0.001);
         assertEquals(12.5, device.todayLiters(), 0.001);
+        assertEquals(12464.5, device.monthLiters(), 0.001);
         assertEquals(now.minusSeconds(1).toString(), device.ts());
     }
 

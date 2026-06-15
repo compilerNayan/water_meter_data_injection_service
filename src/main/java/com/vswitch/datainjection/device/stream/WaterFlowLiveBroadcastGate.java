@@ -27,6 +27,7 @@ public class WaterFlowLiveBroadcastGate {
     private static final Logger log = LoggerFactory.getLogger(WaterFlowLiveBroadcastGate.class);
 
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    private final DeviceMonthPrefixCache monthPrefixCache;
     private final Clock clock;
     private final ScheduledExecutorService scheduler;
     private final Map<String, ConcurrentHashMap<String, PendingWaterFlow>> pendingByTenant =
@@ -36,9 +37,11 @@ public class WaterFlowLiveBroadcastGate {
 
     WaterFlowLiveBroadcastGate(
             TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
+            DeviceMonthPrefixCache monthPrefixCache,
             Clock clock,
             ScheduledExecutorService waterFlowBroadcastScheduler) {
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
+        this.monthPrefixCache = monthPrefixCache;
         this.clock = clock;
         this.scheduler = waterFlowBroadcastScheduler;
     }
@@ -71,6 +74,7 @@ public class WaterFlowLiveBroadcastGate {
 
     public void clearDevice(String deviceId) {
         String deviceKey = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
+        monthPrefixCache.evict(deviceId);
         for (ConcurrentHashMap<String, PendingWaterFlow> pending : pendingByTenant.values()) {
             pending.remove(deviceKey);
         }
@@ -155,7 +159,7 @@ public class WaterFlowLiveBroadcastGate {
         }
     }
 
-    private static WaterFlowTickDevice toTickDevice(PendingWaterFlow pending) {
+    private WaterFlowTickDevice toTickDevice(PendingWaterFlow pending) {
         DeviceStreamPulsePayload payload = pending.payload();
         return new WaterFlowTickDevice(
                 payload.deviceId(),
@@ -165,6 +169,7 @@ public class WaterFlowLiveBroadcastGate {
                 pending.flowRateLpm(),
                 payload.cumulativeLiters(),
                 payload.todayLiters(),
+                monthPrefixCache.liveMonthLiters(payload.deviceId(), payload.todayLiters()),
                 payload.ml() > 0 ? "flowing" : "idle");
     }
 

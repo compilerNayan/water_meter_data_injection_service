@@ -71,7 +71,7 @@ public class DeviceStore {
                         .build());
     }
 
-    Optional<DeviceConfigRecord> findDeviceConfig(String deviceId) {
+    public Optional<DeviceConfigRecord> findDeviceConfig(String deviceId) {
         var response =
                 dynamoDbClient.getItem(
                         GetItemRequest.builder()

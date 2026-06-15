@@ -78,6 +78,12 @@ public class VolumeReadingService {
     }
 
     public double sumMonthLiters(String deviceId, String timezone) {
+        return sumLitersThroughYesterday(deviceId, timezone)
+                + getTodayUsedLiters(deviceId, timezone);
+    }
+
+    /** Sum of completed days in the current calendar month (device timezone), excluding today. */
+    public double sumLitersThroughYesterday(String deviceId, String timezone) {
         ZoneId zone = safeZone(timezone);
         LocalDate today = LocalDate.now(zone);
         YearMonth month = YearMonth.from(today);
@@ -85,7 +91,7 @@ public class VolumeReadingService {
         for (LocalDate date = month.atDay(1); date.isBefore(today); date = date.plusDays(1)) {
             total += litersForCompletedDay(deviceId, date);
         }
-        return total + getTodayUsedLiters(deviceId, timezone);
+        return total;
     }
 
     DailySummaryResponse getDailySummary(
@@ -176,7 +182,17 @@ public class VolumeReadingService {
     public double litersForCompletedDay(String deviceId, LocalDate date) {
         return deviceStore
                 .findDayHistory(deviceId, date)
-                .map(DayHistoryRecord::totalLiters)
+                .map(
+                        history -> {
+                            if (history.totalLiters() > 0) {
+                                return history.totalLiters();
+                            }
+                            if (history.vCsv() != null && !history.vCsv().isBlank()) {
+                                return MinuteVolumeCsv.sumLiters(
+                                        MinuteVolumeCsv.decodeMl(history.vCsv()));
+                            }
+                            return 0.0;
+                        })
                 .orElse(0.0);
     }
 

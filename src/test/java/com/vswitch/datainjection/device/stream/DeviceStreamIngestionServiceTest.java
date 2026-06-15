@@ -26,6 +26,7 @@ class DeviceStreamIngestionServiceTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
     @Mock private com.vswitch.datainjection.device.DeviceFacade deviceFacade;
+    @Mock private DeviceMonthPrefixCache monthPrefixCache;
 
     private DeviceLiveTelemetryStore store;
     private DevicePresenceService presenceService;
@@ -39,6 +40,7 @@ class DeviceStreamIngestionServiceTest {
         broadcastGate =
                 new WaterFlowLiveBroadcastGate(
                         liveUpdateBroadcaster,
+                        monthPrefixCache,
                         Clock.fixed(Instant.parse("2026-06-13T10:00:05Z"), ZoneOffset.UTC),
                         Executors.newSingleThreadScheduledExecutor());
         service =
