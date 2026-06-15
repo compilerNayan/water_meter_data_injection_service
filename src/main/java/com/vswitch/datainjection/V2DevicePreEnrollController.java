@@ -37,4 +37,14 @@ public class V2DevicePreEnrollController {
                 devicePreEnrollService.dummyEnroll(jwt.getSubject(), tenantId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @PostMapping("/v2/tenants/{tenantId}/devices/dummy-enroll/bulk")
+    ResponseEntity<BulkDummyEnrollResponse> bulkDummyEnrollDevices(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable String tenantId,
+            @RequestBody BulkDummyEnrollRequest request) {
+        BulkDummyEnrollResponse response =
+                devicePreEnrollService.bulkDummyEnroll(jwt.getSubject(), tenantId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
 }

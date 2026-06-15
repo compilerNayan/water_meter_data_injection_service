@@ -8,6 +8,7 @@ import java.util.concurrent.ExecutorService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +41,7 @@ public class DummyDeviceHistoricalBackfillService {
     DummyDeviceHistoricalBackfillService(
             DeviceFacade deviceFacade,
             MockDeviceProfileFactory profileFactory,
-            ExecutorService dummyDeviceBackfillExecutor,
+            @Qualifier("dummyDeviceBackfillExecutor") ExecutorService dummyDeviceBackfillExecutor,
             @Value("${dummy.history.backfill.days:30}") int backfillDays,
             @Value("${day.history.ttl.days:400}") int historyTtlDays,
             @Value("${dummy.history.backfill.enabled:true}") boolean enabled) {

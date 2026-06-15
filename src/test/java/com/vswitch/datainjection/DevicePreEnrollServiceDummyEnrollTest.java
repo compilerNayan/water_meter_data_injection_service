@@ -2,18 +2,19 @@ package com.vswitch.datainjection;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,8 +29,25 @@ class DevicePreEnrollServiceDummyEnrollTest {
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private DummyDeviceRepository dummyDeviceRepository;
     @Mock private DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
+    @Mock private ExecutorService dummyBulkEnrollExecutor;
 
-    @InjectMocks private DevicePreEnrollService service;
+    private DevicePreEnrollService service;
+
+    @BeforeEach
+    void setUp() {
+        service =
+                new DevicePreEnrollService(
+                        dynamoDbClient,
+                        userService,
+                        preEnrollRepository,
+                        unitService,
+                        enrollmentCompletionService,
+                        dummyDeviceRepository,
+                        dummyHistoricalBackfillService,
+                        dummyBulkEnrollExecutor,
+                        "WaterMeterDevicePreEnrollments",
+                        1000);
+    }
 
     @Test
     void dummyEnrollMarksPreEnrollEnrolledAndCompletesPendingUnit() {
