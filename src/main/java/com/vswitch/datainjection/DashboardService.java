@@ -12,29 +12,34 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.vswitch.datainjection.device.DeviceFacade;
 import com.vswitch.datainjection.device.DeviceQuotaConfig;
+import com.vswitch.datainjection.device.stream.DevicePresenceService;
+import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
 
 @Service
 public class DashboardService {
 
-    private static final Duration OFFLINE_THRESHOLD = Duration.ofMinutes(15);
+    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
 
     private final UnitService unitService;
     private final TelemetryIngestionService telemetryIngestionService;
     private final WaterReadingService waterReadingService;
     private final DeviceFacade deviceFacade;
     private final TenantMetadataService tenantMetadataService;
+    private final DevicePresenceService devicePresenceService;
 
     DashboardService(
             UnitService unitService,
             TelemetryIngestionService telemetryIngestionService,
             WaterReadingService waterReadingService,
             DeviceFacade deviceFacade,
-            TenantMetadataService tenantMetadataService) {
+            TenantMetadataService tenantMetadataService,
+            DevicePresenceService devicePresenceService) {
         this.unitService = unitService;
         this.telemetryIngestionService = telemetryIngestionService;
         this.waterReadingService = waterReadingService;
         this.deviceFacade = deviceFacade;
         this.tenantMetadataService = tenantMetadataService;
+        this.devicePresenceService = devicePresenceService;
     }
 
     DashboardResponse getDashboard(String tenantId) {
@@ -64,8 +69,14 @@ public class DashboardService {
 
         Optional<DeviceStateRecord> stateOpt =
                 telemetryIngestionService.findDeviceState(deviceId);
-        boolean isOnline = stateOpt.isPresent() && !isOffline(stateOpt.get());
-        String lastSeenAt = stateOpt.map(DeviceStateRecord::lastSeenAt).orElse("");
+        boolean isOnline =
+                devicePresenceService.isOnline(deviceId)
+                        || (stateOpt.isPresent() && !isOffline(stateOpt.get()));
+        String lastSeenAt =
+                devicePresenceService
+                        .lastSeenAt(deviceId)
+                        .map(Instant::toString)
+                        .orElse(stateOpt.map(DeviceStateRecord::lastSeenAt).orElse(""));
         String status = resolveStatus(stateOpt.orElse(null), isOnline);
         double flowRateLpm = stateOpt.map(DeviceStateRecord::flowRateLpm).orElse(0.0);
 

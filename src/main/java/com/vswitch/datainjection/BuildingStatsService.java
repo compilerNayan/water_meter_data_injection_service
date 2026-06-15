@@ -17,10 +17,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
+
 @Service
 public class BuildingStatsService {
 
-    private static final Duration OFFLINE_THRESHOLD = Duration.ofMinutes(15);
+    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final UnitService unitService;

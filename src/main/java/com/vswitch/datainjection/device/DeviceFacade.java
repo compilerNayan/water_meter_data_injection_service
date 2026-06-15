@@ -22,6 +22,8 @@ public interface DeviceFacade {
 
     void ingestSecondPulse(String tenantId, String deviceId, Instant ts, double ml);
 
+    void touchHeartbeat(String tenantId, String deviceId, Instant ts);
+
     void ingestLiveTick(
             UnitRecord unit,
             Instant minute,

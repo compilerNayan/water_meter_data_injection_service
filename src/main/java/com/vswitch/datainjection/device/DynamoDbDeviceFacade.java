@@ -27,12 +27,13 @@ import com.vswitch.datainjection.UnitRecord;
 import com.vswitch.datainjection.ValveStateResponse;
 import com.vswitch.datainjection.ValveUpdateRequest;
 import com.vswitch.datainjection.VolumeReadingService;
+import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
 
 @Service
 @ConditionalOnProperty(name = "mock.telemetry.enabled", havingValue = "false", matchIfMissing = true)
 public class DynamoDbDeviceFacade implements DeviceFacade {
 
-    private static final Duration OFFLINE_THRESHOLD = Duration.ofMinutes(15);
+    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     protected final DeviceStore deviceStore;
@@ -136,6 +137,26 @@ public class DynamoDbDeviceFacade implements DeviceFacade {
                         ts.toString(),
                         current.mockProfile(),
                         now);
+        deviceStore.putDeviceState(updated);
+    }
+
+    @Override
+    public void touchHeartbeat(String tenantId, String deviceId, Instant ts) {
+        DeviceStateRecord current = requireDeviceState(deviceId, tenantId);
+        String heartbeatAt = ts != null ? ts.toString() : Instant.now().toString();
+        DeviceStateRecord updated =
+                new DeviceStateRecord(
+                        deviceId,
+                        tenantId,
+                        current.cumulativeLiters(),
+                        current.flowRateLpm(),
+                        current.status(),
+                        current.valveTargetPercent(),
+                        current.valveActualPercent(),
+                        current.lastUserPressurePercent(),
+                        heartbeatAt,
+                        current.mockProfile(),
+                        Instant.now().toString());
         deviceStore.putDeviceState(updated);
     }
 

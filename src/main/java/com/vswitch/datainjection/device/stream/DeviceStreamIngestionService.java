@@ -16,12 +16,15 @@ public class DeviceStreamIngestionService {
 
     private final DeviceLiveTelemetryStore liveTelemetryStore;
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    private final DevicePresenceService presenceService;
 
     DeviceStreamIngestionService(
             DeviceLiveTelemetryStore liveTelemetryStore,
-            TenantLiveUpdateBroadcaster liveUpdateBroadcaster) {
+            TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
+            DevicePresenceService presenceService) {
         this.liveTelemetryStore = liveTelemetryStore;
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
+        this.presenceService = presenceService;
     }
 
     public void ingestPulse(DeviceStreamPulsePayload payload) {
@@ -40,6 +43,7 @@ public class DeviceStreamIngestionService {
                         flowRateLpm,
                         receivedAt);
         liveTelemetryStore.put(snapshot);
+        presenceService.recordPulse(payload.tenantId(), payload.deviceId(), receivedAt);
 
         if (payload.ml() > 0) {
             broadcastWaterFlow(payload, flowRateLpm);
@@ -48,6 +52,7 @@ public class DeviceStreamIngestionService {
 
     public void clearLiveTelemetry(String deviceId) {
         liveTelemetryStore.clear(deviceId);
+        presenceService.clear(deviceId);
     }
 
     private void broadcastWaterFlow(DeviceStreamPulsePayload payload, double flowRateLpm) {

@@ -22,14 +22,17 @@ import static org.mockito.Mockito.verify;
 class DeviceStreamIngestionServiceTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    @Mock private com.vswitch.datainjection.device.DeviceFacade deviceFacade;
 
     private DeviceLiveTelemetryStore store;
+    private DevicePresenceService presenceService;
     private DeviceStreamIngestionService service;
 
     @BeforeEach
     void setUp() {
         store = new DeviceLiveTelemetryStore();
-        service = new DeviceStreamIngestionService(store, liveUpdateBroadcaster);
+        presenceService = new DevicePresenceService(liveUpdateBroadcaster, deviceFacade);
+        service = new DeviceStreamIngestionService(store, liveUpdateBroadcaster, presenceService);
     }
 
     @Test
@@ -48,16 +51,20 @@ class DeviceStreamIngestionServiceTest {
         assertEquals(2.7, snapshot.flowRateLpm(), 0.001);
 
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
-        verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), captor.capture());
-        LiveUpdateMessage message = captor.getValue();
-        assertEquals("water_flow", message.type());
+        verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
+                .broadcast(eq("63tk0y1"), captor.capture());
+        LiveUpdateMessage message =
+                captor.getAllValues().stream()
+                        .filter(item -> LiveUpdateMessage.TYPE_WATER_FLOW.equals(item.type()))
+                        .findFirst()
+                        .orElseThrow();
         assertEquals("QJPDXN094", message.deviceId());
         assertEquals(45, message.ml());
         assertEquals(123.456, message.cumulativeLiters());
     }
 
     @Test
-    void storesPulseWithoutBroadcastWhenMlZero() {
+    void storesPulseWithoutBroadcastingWaterFlowWhenMlZero() {
         service.ingestPulse(
                 DeviceStreamPulsePayload.from(
                         "63tk0y1",
@@ -68,8 +75,15 @@ class DeviceStreamIngestionServiceTest {
                         120.0));
 
         assertTrue(store.find("QJPDXN094").isPresent());
-        verify(liveUpdateBroadcaster, never())
-                .broadcast(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
+        verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), captor.capture());
+        assertEquals(LiveUpdateMessage.TYPE_DEVICE_PRESENCE, captor.getValue().type());
+        verify(liveUpdateBroadcaster, org.mockito.Mockito.never())
+                .broadcast(
+                        eq("63tk0y1"),
+                        org.mockito.ArgumentMatchers.argThat(
+                                message ->
+                                        LiveUpdateMessage.TYPE_WATER_FLOW.equals(message.type())));
     }
 
     @Test

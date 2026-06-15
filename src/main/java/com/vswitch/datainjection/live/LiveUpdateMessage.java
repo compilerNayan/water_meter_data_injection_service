@@ -22,6 +22,7 @@ public record LiveUpdateMessage(
 
     public static final String TYPE_WATER_FLOW = "water_flow";
     public static final String TYPE_BUCKET_30M = "bucket_30m";
+    public static final String TYPE_DEVICE_PRESENCE = "device_presence";
     public static final String TYPE_SUBSCRIBED = "subscribed";
     public static final String TYPE_ERROR = "error";
 
@@ -63,6 +64,24 @@ public record LiveUpdateMessage(
                 null,
                 periodStart.toString(),
                 "refresh",
+                null,
+                null);
+    }
+
+    public static LiveUpdateMessage devicePresence(
+            String tenantId, String deviceId, String unitId, boolean online, Instant ts) {
+        return new LiveUpdateMessage(
+                TYPE_DEVICE_PRESENCE,
+                tenantId,
+                deviceId,
+                unitId,
+                ts.toString(),
+                null,
+                null,
+                null,
+                online ? "online" : "offline",
+                null,
+                null,
                 null,
                 null);
     }
