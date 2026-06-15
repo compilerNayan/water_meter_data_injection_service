@@ -31,6 +31,7 @@ public class UnitService {
     private final String tenantIdIndexName;
     private final TenantMetadataService tenantMetadataService;
     private final PreEnrollRepository preEnrollRepository;
+    private final DummyDeviceRepository dummyDeviceRepository;
     private final DeviceFacade deviceFacade;
 
     UnitService(
@@ -38,12 +39,14 @@ public class UnitService {
             @Value("${units.table.name:WaterMeterUnits}") String tableName,
             @Autowired @Lazy TenantMetadataService tenantMetadataService,
             PreEnrollRepository preEnrollRepository,
+            DummyDeviceRepository dummyDeviceRepository,
             DeviceFacade deviceFacade) {
         this.dynamoDbClient = dynamoDbClient;
         this.tableName = tableName;
         this.tenantIdIndexName = "tenantId-index";
         this.tenantMetadataService = tenantMetadataService;
         this.preEnrollRepository = preEnrollRepository;
+        this.dummyDeviceRepository = dummyDeviceRepository;
         this.deviceFacade = deviceFacade;
     }
 
@@ -178,6 +181,14 @@ public class UnitService {
                         preEnroll ->
                                 new EnrollmentStatusResponse(
                                         true, PreEnrollRepository.STATUS_ENROLLED))
+                .or(() ->
+                        dummyDeviceRepository
+                                .find(tenantId, normalizedDeviceId)
+                                .map(
+                                        ignored ->
+                                                new EnrollmentStatusResponse(
+                                                        true,
+                                                        PreEnrollRepository.STATUS_ENROLLED)))
                 .orElseThrow(
                         () ->
                                 new ResponseStatusException(
@@ -185,11 +196,7 @@ public class UnitService {
     }
 
     boolean isDummyEnrolled(String tenantId, String deviceId) {
-        return preEnrollRepository
-                .findBySerialNumber(deviceId.trim())
-                .filter(preEnroll -> tenantId.equals(preEnroll.tenantId()))
-                .filter(preEnroll -> PreEnrollRepository.STATUS_ENROLLED.equals(preEnroll.status()))
-                .isPresent();
+        return dummyDeviceRepository.isDummy(tenantId, deviceId);
     }
 
     Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {

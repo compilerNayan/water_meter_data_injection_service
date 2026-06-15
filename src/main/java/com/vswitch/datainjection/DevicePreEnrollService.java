@@ -23,6 +23,7 @@ public class DevicePreEnrollService {
     private final PreEnrollRepository preEnrollRepository;
     private final UnitService unitService;
     private final EnrollmentCompletionService enrollmentCompletionService;
+    private final DummyDeviceRepository dummyDeviceRepository;
     private final String tableName;
 
     DevicePreEnrollService(
@@ -31,6 +32,7 @@ public class DevicePreEnrollService {
             PreEnrollRepository preEnrollRepository,
             UnitService unitService,
             EnrollmentCompletionService enrollmentCompletionService,
+            DummyDeviceRepository dummyDeviceRepository,
             @Value("${pre.enroll.table.name:WaterMeterDevicePreEnrollments}")
                     String tableName) {
         this.dynamoDbClient = dynamoDbClient;
@@ -38,6 +40,7 @@ public class DevicePreEnrollService {
         this.preEnrollRepository = preEnrollRepository;
         this.unitService = unitService;
         this.enrollmentCompletionService = enrollmentCompletionService;
+        this.dummyDeviceRepository = dummyDeviceRepository;
         this.tableName = tableName;
     }
 
@@ -93,6 +96,8 @@ public class DevicePreEnrollService {
                         expiresAt.toString(),
                         userId,
                         nowStr));
+
+        dummyDeviceRepository.register(tenantId, serialNumber, nowStr, userId);
 
         unitService
                 .findByTenantAndDeviceId(tenantId, serialNumber)

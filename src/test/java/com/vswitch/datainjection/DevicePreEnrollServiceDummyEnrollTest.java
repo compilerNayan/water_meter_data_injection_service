@@ -24,6 +24,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
     @Mock private PreEnrollRepository preEnrollRepository;
     @Mock private UnitService unitService;
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
+    @Mock private DummyDeviceRepository dummyDeviceRepository;
 
     @InjectMocks private DevicePreEnrollService service;
 
@@ -79,6 +80,8 @@ class DevicePreEnrollServiceDummyEnrollTest {
         verify(preEnrollRepository).save(captor.capture());
         assertEquals(PreEnrollRepository.STATUS_ENROLLED, captor.getValue().status());
         assertTrue(captor.getValue().enrolledAt() != null && !captor.getValue().enrolledAt().isBlank());
+        verify(dummyDeviceRepository)
+                .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
         verify(enrollmentCompletionService)
                 .onEnrolled(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString());
     }
@@ -108,6 +111,8 @@ class DevicePreEnrollServiceDummyEnrollTest {
 
         assertEquals(PreEnrollRepository.STATUS_ENROLLED, response.status());
         verify(preEnrollRepository).save(org.mockito.ArgumentMatchers.any());
+        verify(dummyDeviceRepository)
+                .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
         verify(enrollmentCompletionService, org.mockito.Mockito.never())
                 .onEnrolled(
                         org.mockito.ArgumentMatchers.any(),
