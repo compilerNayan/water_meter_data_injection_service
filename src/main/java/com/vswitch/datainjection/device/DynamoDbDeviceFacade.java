@@ -254,6 +254,26 @@ public class DynamoDbDeviceFacade implements DeviceFacade {
     }
 
     @Override
+    public void markDeviceOffline(String tenantId, String deviceId) {
+        DeviceStateRecord current = requireDeviceState(deviceId, tenantId);
+        String now = Instant.now().toString();
+        DeviceStateRecord updated =
+                new DeviceStateRecord(
+                        deviceId,
+                        tenantId,
+                        current.cumulativeLiters(),
+                        0,
+                        DeviceStateRecord.STATUS_OFFLINE,
+                        current.valveTargetPercent(),
+                        current.valveActualPercent(),
+                        current.lastUserPressurePercent(),
+                        current.lastSeenAt(),
+                        current.mockProfile(),
+                        now);
+        deviceStore.putDeviceState(updated);
+    }
+
+    @Override
     public void writeDayHistory(DayHistoryRecord record) {
         deviceStore.putDayHistory(record);
     }

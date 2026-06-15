@@ -34,6 +34,8 @@ public interface DeviceFacade {
 
     void ingest30MinuteBucket(ThirtyMinuteBucketPayload payload);
 
+    void markDeviceOffline(String tenantId, String deviceId);
+
     void ingestValveStateReport(String tenantId, String deviceId, double target, double actual);
 
     void writeDayHistory(DayHistoryRecord record);

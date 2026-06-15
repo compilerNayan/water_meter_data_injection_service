@@ -1,6 +1,5 @@
 package com.vswitch.datainjection;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,12 +12,9 @@ import org.springframework.web.server.ResponseStatusException;
 import com.vswitch.datainjection.device.DeviceFacade;
 import com.vswitch.datainjection.device.DeviceQuotaConfig;
 import com.vswitch.datainjection.device.stream.DevicePresenceService;
-import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
 
 @Service
 public class DashboardService {
-
-    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
 
     private final UnitService unitService;
     private final TelemetryIngestionService telemetryIngestionService;
@@ -69,9 +65,7 @@ public class DashboardService {
 
         Optional<DeviceStateRecord> stateOpt =
                 telemetryIngestionService.findDeviceState(deviceId);
-        boolean isOnline =
-                devicePresenceService.isOnline(deviceId)
-                        || (stateOpt.isPresent() && !isOffline(stateOpt.get()));
+        boolean isOnline = devicePresenceService.resolveIsOnline(deviceId, stateOpt);
         String lastSeenAt =
                 devicePresenceService
                         .lastSeenAt(deviceId)
@@ -130,15 +124,6 @@ public class DashboardService {
             return DeviceStateRecord.STATUS_IDLE;
         }
         return status;
-    }
-
-    private static boolean isOffline(DeviceStateRecord state) {
-        if (state.lastSeenAt() == null || state.lastSeenAt().isBlank()) {
-            return true;
-        }
-        return Duration.between(Instant.parse(state.lastSeenAt()), Instant.now())
-                        .compareTo(OFFLINE_THRESHOLD)
-                > 0;
     }
 
     private static String emptyToNull(String value) {

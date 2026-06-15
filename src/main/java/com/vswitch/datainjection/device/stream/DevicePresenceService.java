@@ -26,6 +26,24 @@ public class DevicePresenceService {
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
     }
 
+    public void markOffline(String tenantId, String deviceId, Instant at) {
+        if (tenantId == null
+                || tenantId.isBlank()
+                || deviceId == null
+                || deviceId.isBlank()) {
+            return;
+        }
+
+        String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
+        PresenceEntry previous = byDevice.get(key);
+        boolean wasOnline = previous == null || previous.online();
+        Instant lastSeen = previous != null ? previous.lastSeenAt() : at;
+        byDevice.put(key, new PresenceEntry(tenantId, deviceId, lastSeen, false));
+        if (wasOnline) {
+            broadcastPresence(tenantId, deviceId, false, at);
+        }
+    }
+
     public void recordPulse(String tenantId, String deviceId, Instant receivedAt) {
         if (tenantId == null
                 || tenantId.isBlank()
@@ -54,6 +72,25 @@ public class DevicePresenceService {
             return false;
         }
         return entry.online() && !isStale(entry.lastSeenAt());
+    }
+
+    public boolean resolveIsOnline(String deviceId, java.util.Optional<com.vswitch.datainjection.DeviceStateRecord> state) {
+        String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
+        PresenceEntry entry = byDevice.get(key);
+        if (entry != null) {
+            return entry.online() && !isStale(entry.lastSeenAt());
+        }
+        return state.map(this::isStateOnline).orElse(false);
+    }
+
+    private boolean isStateOnline(com.vswitch.datainjection.DeviceStateRecord state) {
+        if (state.lastSeenAt() == null || state.lastSeenAt().isBlank()) {
+            return false;
+        }
+        if (com.vswitch.datainjection.DeviceStateRecord.STATUS_OFFLINE.equals(state.status())) {
+            return false;
+        }
+        return !isStale(Instant.parse(state.lastSeenAt()));
     }
 
     public Optional<Instant> lastSeenAt(String deviceId) {

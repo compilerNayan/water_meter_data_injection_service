@@ -1,6 +1,5 @@
 package com.vswitch.datainjection;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -17,25 +16,27 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
-import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
+import com.vswitch.datainjection.device.stream.DevicePresenceService;
 
 @Service
 public class BuildingStatsService {
 
-    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final UnitService unitService;
     private final TelemetryIngestionService telemetryIngestionService;
     private final VolumeReadingService volumeReadingService;
+    private final DevicePresenceService devicePresenceService;
 
     BuildingStatsService(
             UnitService unitService,
             TelemetryIngestionService telemetryIngestionService,
-            VolumeReadingService volumeReadingService) {
+            VolumeReadingService volumeReadingService,
+            DevicePresenceService devicePresenceService) {
         this.unitService = unitService;
         this.telemetryIngestionService = telemetryIngestionService;
         this.volumeReadingService = volumeReadingService;
+        this.devicePresenceService = devicePresenceService;
     }
 
     BuildingSummaryResponse getSummary(String tenantId) {
@@ -62,14 +63,15 @@ public class BuildingStatsService {
 
             Optional<DeviceStateRecord> state =
                     telemetryIngestionService.findDeviceState(unit.deviceId());
-            if (state.isEmpty() || isOffline(state.get())) {
+            if (!devicePresenceService.resolveIsOnline(unit.deviceId(), state)) {
                 offline++;
             } else {
                 online++;
             }
             if (state.isPresent()
                     && (DeviceStateRecord.STATUS_LEAK_SUSPECTED.equals(state.get().status())
-                            || isOffline(state.get()))) {
+                            || !devicePresenceService.resolveIsOnline(
+                                    unit.deviceId(), state))) {
                 alerts++;
             }
         }
@@ -195,15 +197,6 @@ public class BuildingStatsService {
                 null,
                 block != null && !block.isBlank() ? block : emptyToNull(unit.block()),
                 wing != null && !wing.isBlank() ? wing : emptyToNull(unit.wing()));
-    }
-
-    private static boolean isOffline(DeviceStateRecord state) {
-        if (state.lastSeenAt() == null || state.lastSeenAt().isBlank()) {
-            return true;
-        }
-        return Duration.between(Instant.parse(state.lastSeenAt()), Instant.now())
-                        .compareTo(OFFLINE_THRESHOLD)
-                > 0;
     }
 
     private static ZoneId safeZone(String timezone) {
