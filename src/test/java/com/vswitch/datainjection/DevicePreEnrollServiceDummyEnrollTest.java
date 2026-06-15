@@ -12,6 +12,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
+
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,6 +27,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
     @Mock private UnitService unitService;
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private DummyDeviceRepository dummyDeviceRepository;
+    @Mock private DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
 
     @InjectMocks private DevicePreEnrollService service;
 
@@ -84,6 +87,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
         verify(enrollmentCompletionService)
                 .onEnrolled(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString());
+        verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
     }
 
     @Test
@@ -113,6 +117,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
         verify(preEnrollRepository).save(org.mockito.ArgumentMatchers.any());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
+        verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
         verify(enrollmentCompletionService, org.mockito.Mockito.never())
                 .onEnrolled(
                         org.mockito.ArgumentMatchers.any(),

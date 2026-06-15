@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
+
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
@@ -24,6 +26,7 @@ public class DevicePreEnrollService {
     private final UnitService unitService;
     private final EnrollmentCompletionService enrollmentCompletionService;
     private final DummyDeviceRepository dummyDeviceRepository;
+    private final DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
     private final String tableName;
 
     DevicePreEnrollService(
@@ -33,6 +36,7 @@ public class DevicePreEnrollService {
             UnitService unitService,
             EnrollmentCompletionService enrollmentCompletionService,
             DummyDeviceRepository dummyDeviceRepository,
+            DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService,
             @Value("${pre.enroll.table.name:WaterMeterDevicePreEnrollments}")
                     String tableName) {
         this.dynamoDbClient = dynamoDbClient;
@@ -41,6 +45,7 @@ public class DevicePreEnrollService {
         this.unitService = unitService;
         this.enrollmentCompletionService = enrollmentCompletionService;
         this.dummyDeviceRepository = dummyDeviceRepository;
+        this.dummyHistoricalBackfillService = dummyHistoricalBackfillService;
         this.tableName = tableName;
     }
 
@@ -108,6 +113,8 @@ public class DevicePreEnrollService {
                                         tenantId, serialNumber, nowStr);
                             }
                         });
+
+        dummyHistoricalBackfillService.scheduleBackfill(tenantId, serialNumber);
 
         return new DevicePreEnrollResponse(
                 tenantId, serialNumber, PreEnrollRepository.STATUS_ENROLLED, expiresAt.toString());

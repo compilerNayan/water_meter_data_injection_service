@@ -20,7 +20,7 @@ public class MockDeviceProfileFactory {
         return new MockDeviceProfile(deviceId, dailyTarget, anomaly, seed);
     }
 
-    double hourlyPatternLiters(double hour) {
+    public double hourlyPatternLiters(double hour) {
         double morning = Math.exp(-Math.pow(hour - 7, 2) / 8) * 8;
         double evening = Math.exp(-Math.pow(hour - 19, 2) / 10) * 10;
         return 0.8 + morning + evening;
