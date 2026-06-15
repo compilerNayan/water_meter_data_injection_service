@@ -87,7 +87,8 @@ class DeviceStreamIngestionServiceTest {
                         null,
                         ts,
                         0,
-                        120.0));
+                        120.0,
+                        15.5));
 
         verify(deviceFacade).touchHeartbeat("63tk0y1", "QJPDXN094", ts);
 
@@ -95,13 +96,19 @@ class DeviceStreamIngestionServiceTest {
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
         verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), captor.capture());
         assertEquals(LiveUpdateMessage.TYPE_DEVICE_PRESENCE, captor.getValue().type());
-        verify(liveUpdateBroadcaster, never())
+
+        broadcastGate.flushNowForTests("QJPDXN094");
+
+        verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
                 .broadcast(
                         eq("63tk0y1"),
                         org.mockito.ArgumentMatchers.argThat(
                                 message ->
                                         LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(
-                                                message.type())));
+                                                message.type())
+                                                && message.devices().get(0).ml() == 0
+                                                && message.devices().get(0).todayLiters()
+                                                        == 15.5));
     }
 
     @Test

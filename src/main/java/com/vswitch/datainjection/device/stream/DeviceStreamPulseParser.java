@@ -36,13 +36,15 @@ public final class DeviceStreamPulseParser {
         double ml = requiredDouble(json, "ml");
         double cumulativeLiters =
                 firstPresentDouble(json, "cumulativeLiters", "currentReading", "cumulative_liters");
+        Double todayLiters =
+                optionalDouble(json, "todayLiters", "todayUsageLiters", "todayUsage", "today_liters");
 
         String tsRaw = optionalString(json, "ts", "timestamp");
         Instant ts =
                 tsRaw != null && !tsRaw.isBlank() ? Instant.parse(tsRaw) : Instant.now();
 
         return DeviceStreamPulsePayload.from(
-                tenantId, serialNumber, deviceId, ts, ml, cumulativeLiters);
+                tenantId, serialNumber, deviceId, ts, ml, cumulativeLiters, todayLiters);
     }
 
     private static String requiredString(Map<String, Object> json, String key) {
@@ -80,6 +82,15 @@ public final class DeviceStreamPulseParser {
             }
         }
         return 0.0;
+    }
+
+    private static Double optionalDouble(Map<String, Object> json, String... keys) {
+        for (String key : keys) {
+            if (json.containsKey(key) && json.get(key) != null) {
+                return asDouble(json.get(key));
+            }
+        }
+        return null;
     }
 
     private static double asDouble(Object value) {

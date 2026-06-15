@@ -1,6 +1,8 @@
 package com.vswitch.datainjection.dummy;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
@@ -25,6 +27,8 @@ final class DummyDeviceTelemetrySession {
     private Instant currentMinuteStart;
     private final List<MinuteBucketEntry> periodMinutes = new ArrayList<>();
     private double cumulativeLiters;
+    private double todayLiters;
+    private LocalDate todayUtc;
 
     DummyDeviceTelemetrySession(
             String tenantId,
@@ -57,20 +61,28 @@ final class DummyDeviceTelemetrySession {
         return cumulativeLiters;
     }
 
+    double todayLiters() {
+        return todayLiters;
+    }
+
     TickResult tick(Instant now) {
         TickResult.Builder result = TickResult.builder();
+        rollTodayIfNeeded(now);
 
         if (cycleSecond < DummyTelemetryPolicy.PULSES_PER_ACTIVE_MINUTE) {
             double ml = minMl + random.nextInt(maxMl - minMl + 1);
             cumulativeLiters += ml / 1000.0;
+            todayLiters += ml / 1000.0;
             minuteAccumulatorMl += ml;
             result.pulseMl(ml);
             result.pulseTimestamp(now.truncatedTo(ChronoUnit.SECONDS));
             result.cumulativeLiters(cumulativeLiters);
+            result.todayLiters(todayLiters);
         } else {
             result.pulseMl(0);
             result.pulseTimestamp(now.truncatedTo(ChronoUnit.SECONDS));
             result.cumulativeLiters(cumulativeLiters);
+            result.todayLiters(todayLiters);
         }
 
         if (cycleSecond == DummyTelemetryPolicy.PULSES_PER_ACTIVE_MINUTE - 1) {
@@ -97,6 +109,14 @@ final class DummyDeviceTelemetrySession {
         return result.build();
     }
 
+    private void rollTodayIfNeeded(Instant now) {
+        LocalDate date = now.atZone(ZoneOffset.UTC).toLocalDate();
+        if (todayUtc == null || !todayUtc.equals(date)) {
+            todayUtc = date;
+            todayLiters = 0;
+        }
+    }
+
     private static Instant alignPeriodStart(Instant instant) {
         ZonedDateTime zdt = instant.atZone(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
         int minute = zdt.getMinute();
@@ -109,16 +129,19 @@ final class DummyDeviceTelemetrySession {
         private final Double pulseMl;
         private final Instant pulseTimestamp;
         private final Double cumulativeLiters;
+        private final Double todayLiters;
         private final ThirtyMinuteBucketPayload bucket;
 
         private TickResult(
                 Double pulseMl,
                 Instant pulseTimestamp,
                 Double cumulativeLiters,
+                Double todayLiters,
                 ThirtyMinuteBucketPayload bucket) {
             this.pulseMl = pulseMl;
             this.pulseTimestamp = pulseTimestamp;
             this.cumulativeLiters = cumulativeLiters;
+            this.todayLiters = todayLiters;
             this.bucket = bucket;
         }
 
@@ -146,6 +169,10 @@ final class DummyDeviceTelemetrySession {
             return cumulativeLiters;
         }
 
+        double todayLiters() {
+            return todayLiters;
+        }
+
         ThirtyMinuteBucketPayload bucket() {
             return bucket;
         }
@@ -154,6 +181,7 @@ final class DummyDeviceTelemetrySession {
             private Double pulseMl;
             private Instant pulseTimestamp;
             private Double cumulativeLiters;
+            private Double todayLiters;
             private ThirtyMinuteBucketPayload bucket;
 
             Builder pulseMl(double value) {
@@ -171,13 +199,18 @@ final class DummyDeviceTelemetrySession {
                 return this;
             }
 
+            Builder todayLiters(double value) {
+                this.todayLiters = value;
+                return this;
+            }
+
             Builder bucket(ThirtyMinuteBucketPayload value) {
                 this.bucket = value;
                 return this;
             }
 
             TickResult build() {
-                return new TickResult(pulseMl, pulseTimestamp, cumulativeLiters, bucket);
+                return new TickResult(pulseMl, pulseTimestamp, cumulativeLiters, todayLiters, bucket);
             }
         }
     }

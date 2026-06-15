@@ -149,7 +149,8 @@ public class DummyDeviceTelemetrySimulator {
                             session.serialNumber(),
                             result.pulseTimestamp(),
                             result.pulseMl(),
-                            result.cumulativeLiters()));
+                            result.cumulativeLiters(),
+                            result.todayLiters()));
         }
         if (result.hasBucket()) {
             thirtyMinuteBucketIngestionService.ingest(result.bucket());

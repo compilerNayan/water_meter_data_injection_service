@@ -8,7 +8,8 @@ public record DeviceStreamPulsePayload(
         String serialNumber,
         Instant ts,
         double ml,
-        double cumulativeLiters) {
+        double cumulativeLiters,
+        Double todayLiters) {
 
     static DeviceStreamPulsePayload from(
             String tenantId,
@@ -17,6 +18,17 @@ public record DeviceStreamPulsePayload(
             Instant ts,
             double ml,
             double cumulativeLiters) {
+        return from(tenantId, serialNumber, deviceId, ts, ml, cumulativeLiters, null);
+    }
+
+    static DeviceStreamPulsePayload from(
+            String tenantId,
+            String serialNumber,
+            String deviceId,
+            Instant ts,
+            double ml,
+            double cumulativeLiters,
+            Double todayLiters) {
         String resolvedDeviceId =
                 firstNonBlank(deviceId, serialNumber, "").trim().toUpperCase();
         String resolvedSerial =
@@ -27,7 +39,8 @@ public record DeviceStreamPulsePayload(
                 resolvedSerial,
                 ts,
                 ml,
-                cumulativeLiters);
+                cumulativeLiters,
+                todayLiters);
     }
 
     private static String firstNonBlank(String... values) {

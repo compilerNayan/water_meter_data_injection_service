@@ -47,10 +47,7 @@ public class DeviceStreamIngestionService {
         liveTelemetryStore.put(snapshot);
         persistPulse(payload);
         presenceService.recordPulse(payload.tenantId(), payload.deviceId(), receivedAt);
-
-        if (payload.ml() > 0) {
-            waterFlowBroadcastGate.offer(payload, flowRateLpm);
-        }
+        waterFlowBroadcastGate.offer(payload, flowRateLpm);
     }
 
     private void persistPulse(DeviceStreamPulsePayload payload) {

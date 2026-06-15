@@ -34,6 +34,20 @@ class DummyDeviceTelemetrySessionTest {
     }
 
     @Test
+    void accumulatesTodayLitersAcrossPulses() {
+        DummyDeviceTelemetrySession session =
+                new DummyDeviceTelemetrySession(
+                        "tenant-1", "WM001", 1000, 1000, Instant.parse("2026-06-15T10:00:00Z"));
+
+        Instant start = Instant.parse("2026-06-15T10:00:00Z");
+        var first = session.tick(start);
+        var second = session.tick(start.plusSeconds(1));
+
+        assertEquals(1.0, first.todayLiters(), 0.001);
+        assertEquals(2.0, second.todayLiters(), 0.001);
+    }
+
+    @Test
     void accumulatesThirtyMinuteBucketAfterThirtyActiveMinutes() {
         DummyDeviceTelemetrySession session =
                 new DummyDeviceTelemetrySession(

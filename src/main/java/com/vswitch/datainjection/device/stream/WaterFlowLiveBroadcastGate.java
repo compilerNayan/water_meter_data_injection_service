@@ -164,6 +164,7 @@ public class WaterFlowLiveBroadcastGate {
                 payload.ml(),
                 pending.flowRateLpm(),
                 payload.cumulativeLiters(),
+                payload.todayLiters(),
                 payload.ml() > 0 ? "flowing" : "idle");
     }
 

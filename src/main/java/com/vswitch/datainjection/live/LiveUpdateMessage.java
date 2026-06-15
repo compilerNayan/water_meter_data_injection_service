@@ -20,6 +20,7 @@ public record LiveUpdateMessage(
         String action,
         String code,
         String message,
+        Double todayLiters,
         List<WaterFlowTickDevice> devices) {
 
     public static final String TYPE_WATER_FLOW = "water_flow";
@@ -36,7 +37,8 @@ public record LiveUpdateMessage(
             Instant ts,
             double ml,
             double flowRateLpm,
-            double cumulativeLiters) {
+            double cumulativeLiters,
+            Double todayLiters) {
         return new LiveUpdateMessage(
                 TYPE_WATER_FLOW,
                 tenantId,
@@ -51,7 +53,20 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 null,
+                todayLiters,
                 null);
+    }
+
+    public static LiveUpdateMessage waterFlow(
+            String tenantId,
+            String deviceId,
+            String unitId,
+            Instant ts,
+            double ml,
+            double flowRateLpm,
+            double cumulativeLiters) {
+        return waterFlow(
+                tenantId, deviceId, unitId, ts, ml, flowRateLpm, cumulativeLiters, null);
     }
 
     public static LiveUpdateMessage waterFlowTick(
@@ -62,6 +77,7 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 tickTs.toString(),
+                null,
                 null,
                 null,
                 null,
@@ -89,6 +105,7 @@ public record LiveUpdateMessage(
                 "refresh",
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -108,6 +125,7 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -115,6 +133,7 @@ public record LiveUpdateMessage(
         return new LiveUpdateMessage(
                 TYPE_SUBSCRIBED,
                 tenantId,
+                null,
                 null,
                 null,
                 null,
@@ -144,6 +163,7 @@ public record LiveUpdateMessage(
                 null,
                 code,
                 message,
+                null,
                 null);
     }
 }

@@ -38,6 +38,17 @@ class DeviceStreamPulseParserTest {
     }
 
     @Test
+    void acceptsTodayUsageAliases() {
+        DeviceStreamPulsePayload payload =
+                parser.parseLine(
+                        "{\"tenantId\":\"63tk0y1\",\"deviceId\":\"WM000001\",\"ml\":10,"
+                                + "\"currentReading\":88.8,\"todayUsageLiters\":12.5}");
+
+        assertEquals(88.8, payload.cumulativeLiters(), 0.001);
+        assertEquals(12.5, payload.todayLiters(), 0.001);
+    }
+
+    @Test
     void rejectsMissingTenantId() {
         assertThrows(
                 IllegalArgumentException.class,

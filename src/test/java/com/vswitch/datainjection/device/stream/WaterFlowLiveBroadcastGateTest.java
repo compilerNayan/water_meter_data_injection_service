@@ -70,6 +70,7 @@ class WaterFlowLiveBroadcastGateTest {
         WaterFlowTickDevice device = message.devices().get(0);
         assertEquals("WM001", device.deviceId());
         assertEquals(149, device.cumulativeLiters(), 0.001);
+        assertEquals(12.5, device.todayLiters(), 0.001);
         assertEquals(now.minusSeconds(1).toString(), device.ts());
     }
 
@@ -129,6 +130,6 @@ class WaterFlowLiveBroadcastGateTest {
     private static DeviceStreamPulsePayload pulse(
             String deviceId, Instant ts, double cumulativeLiters) {
         return DeviceStreamPulsePayload.from(
-                "tenant-1", deviceId, deviceId, ts, 45, cumulativeLiters);
+                "tenant-1", deviceId, deviceId, ts, 45, cumulativeLiters, 12.5);
     }
 }
