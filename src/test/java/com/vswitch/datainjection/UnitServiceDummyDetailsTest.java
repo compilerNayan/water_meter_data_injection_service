@@ -24,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class UnitServiceDummyLocationTest {
+class UnitServiceDummyDetailsTest {
 
     @Mock private DynamoDbClient dynamoDbClient;
     @Mock private TenantMetadataService tenantMetadataService;
@@ -47,14 +47,14 @@ class UnitServiceDummyLocationTest {
     }
 
     @Test
-    void skipsWhenNoLocationFieldsProvided() {
-        unitService.upsertDummyUnitLocation("tenant-1", "WM001", null, null, null);
+    void skipsWhenNoUnitDetailsProvided() {
+        unitService.upsertDummyUnitDetails("tenant-1", "WM001", new DevicePreEnrollRequest("WM001"));
 
         verify(dynamoDbClient, never()).putItem(any(PutItemRequest.class));
     }
 
     @Test
-    void mergesLocationIntoExistingUnit() {
+    void mergesAllDetailsIntoExistingUnit() {
         UnitRecord existing =
                 new UnitRecord(
                         "wm-WM001",
@@ -75,28 +75,56 @@ class UnitServiceDummyLocationTest {
         when(dynamoDbClient.query(any(QueryRequest.class)))
                 .thenReturn(QueryResponse.builder().items(List.of(existing.toItem())).build());
 
-        unitService.upsertDummyUnitLocation("tenant-1", "WM001", "B", "West", "3");
+        unitService.upsertDummyUnitDetails(
+                "tenant-1",
+                "WM001",
+                new DevicePreEnrollRequest(
+                        "WM001",
+                        "Home 205",
+                        "205A",
+                        "3",
+                        "B",
+                        "West",
+                        "Jane Doe",
+                        "+919999999999",
+                        "Corner flat"));
 
         ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
         verify(dynamoDbClient).putItem(captor.capture());
         Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> item =
                 captor.getValue().item();
 
+        assertEquals("Home 205", item.get("name").s());
+        assertEquals("205A", item.get("flatNumber").s());
+        assertEquals("3", item.get("floor").s());
         assertEquals("B", item.get("block").s());
         assertEquals("West", item.get("wing").s());
-        assertEquals("3", item.get("floor").s());
-        assertEquals("Flat 205", item.get("name").s());
+        assertEquals("Jane Doe", item.get("residentName").s());
+        assertEquals("+919999999999", item.get("phoneNumber").s());
+        assertEquals("Corner flat", item.get("notes").s());
         assertEquals(UnitRecord.STATUS_PENDING, item.get("enrollmentStatus").s());
         verify(deviceFacade, never()).initializeDeviceState(any(), any());
         verify(tenantMetadataService).recomputeAndPersist("tenant-1");
     }
 
     @Test
-    void createsEnrolledUnitWhenLocationProvidedAndUnitMissing() {
+    void createsEnrolledUnitWhenDetailsProvidedAndUnitMissing() {
         when(dynamoDbClient.query(any(QueryRequest.class)))
                 .thenReturn(QueryResponse.builder().items(List.of()).build());
 
-        unitService.upsertDummyUnitLocation("tenant-1", "WM002", "C", null, "5");
+        unitService.upsertDummyUnitDetails(
+                "tenant-1",
+                "WM002",
+                new DevicePreEnrollRequest(
+                        "WM002",
+                        null,
+                        "502",
+                        "5",
+                        "C",
+                        null,
+                        "John Doe",
+                        "+911234567890",
+                        null));
 
         ArgumentCaptor<PutItemRequest> captor = ArgumentCaptor.forClass(PutItemRequest.class);
         verify(dynamoDbClient).putItem(captor.capture());
@@ -104,9 +132,12 @@ class UnitServiceDummyLocationTest {
                 captor.getValue().item();
 
         assertEquals("wm-WM002", item.get("unitId").s());
-        assertEquals("C", item.get("block").s());
-        assertEquals("", item.get("wing").s());
+        assertEquals("502", item.get("name").s());
+        assertEquals("502", item.get("flatNumber").s());
         assertEquals("5", item.get("floor").s());
+        assertEquals("C", item.get("block").s());
+        assertEquals("John Doe", item.get("residentName").s());
+        assertEquals("+911234567890", item.get("phoneNumber").s());
         assertEquals(UnitRecord.STATUS_ENROLLED, item.get("enrollmentStatus").s());
         verify(deviceFacade).initializeDeviceConfig("WM002", "tenant-1");
         verify(deviceFacade).initializeDeviceState("WM002", "tenant-1");

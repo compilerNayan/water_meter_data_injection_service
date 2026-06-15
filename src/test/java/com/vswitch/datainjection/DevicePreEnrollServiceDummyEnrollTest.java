@@ -15,6 +15,7 @@ import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -103,9 +104,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
         assertTrue(captor.getValue().enrolledAt() != null && !captor.getValue().enrolledAt().isBlank());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
-        verify(unitService)
-                .upsertDummyUnitLocation(
-                        eq("tenant-1"), eq("WM001"), eq(null), eq(null), eq(null));
+        verify(unitService).upsertDummyUnitDetails(eq("tenant-1"), eq("WM001"), any(DevicePreEnrollRequest.class));
         verify(enrollmentCompletionService)
                 .onEnrolled(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString());
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
@@ -138,9 +137,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
         verify(preEnrollRepository).save(org.mockito.ArgumentMatchers.any());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
-        verify(unitService)
-                .upsertDummyUnitLocation(
-                        eq("tenant-1"), eq("WM001"), eq(null), eq(null), eq(null));
+        verify(unitService).upsertDummyUnitDetails(eq("tenant-1"), eq("WM001"), any(DevicePreEnrollRequest.class));
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
         verify(enrollmentCompletionService, org.mockito.Mockito.never())
                 .onEnrolled(
@@ -171,10 +168,28 @@ class DevicePreEnrollServiceDummyEnrollTest {
         service.dummyEnroll(
                 "user-1",
                 "tenant-1",
-                new DevicePreEnrollRequest("WM003", "Block-A", "North", "7"));
+                new DevicePreEnrollRequest(
+                        "WM003",
+                        "Flat 7",
+                        "7",
+                        "7",
+                        "Block-A",
+                        "North",
+                        "Owner Name",
+                        "+911111111111",
+                        "notes"));
 
         verify(unitService)
-                .upsertDummyUnitLocation(
-                        "tenant-1", "WM003", "Block-A", "North", "7");
+                .upsertDummyUnitDetails(
+                        eq("tenant-1"),
+                        eq("WM003"),
+                        org.mockito.ArgumentMatchers.argThat(
+                                request ->
+                                        "Flat 7".equals(request.name())
+                                                && "7".equals(request.flatNumber())
+                                                && "Block-A".equals(request.block())
+                                                && "North".equals(request.wing())
+                                                && "Owner Name".equals(request.residentName())
+                                                && "+911111111111".equals(request.phoneNumber())));
     }
 }

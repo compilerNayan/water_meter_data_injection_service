@@ -170,12 +170,7 @@ public class DevicePreEnrollService {
 
         dummyDeviceRepository.register(tenantId, serialNumber, nowStr, userId);
 
-        unitService.upsertDummyUnitLocation(
-                tenantId,
-                serialNumber,
-                request.block(),
-                request.wing(),
-                request.floor());
+        unitService.upsertDummyUnitDetails(tenantId, serialNumber, request);
 
         unitService
                 .findByTenantAndDeviceId(tenantId, serialNumber)

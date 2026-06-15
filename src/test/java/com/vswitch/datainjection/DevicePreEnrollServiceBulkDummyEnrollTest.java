@@ -90,8 +90,26 @@ class DevicePreEnrollServiceBulkDummyEnrollTest {
                         "tenant-1",
                         new BulkDummyEnrollRequest(
                                 List.of(
-                                        new DevicePreEnrollRequest("WM001", "A", "East", "1"),
-                                        new DevicePreEnrollRequest("WM002", "B", "West", "2"))));
+                                        new DevicePreEnrollRequest(
+                                                "WM001",
+                                                "Flat 1",
+                                                "101",
+                                                "1",
+                                                "A",
+                                                "East",
+                                                "Alice",
+                                                "+911",
+                                                null),
+                                        new DevicePreEnrollRequest(
+                                                "WM002",
+                                                "Flat 2",
+                                                "202",
+                                                "2",
+                                                "B",
+                                                "West",
+                                                "Bob",
+                                                "+912",
+                                                null))));
 
         assertEquals("tenant-1", response.tenantId());
         assertEquals(2, response.requested());
@@ -103,8 +121,8 @@ class DevicePreEnrollServiceBulkDummyEnrollTest {
                 .register(eq("tenant-1"), anyString(), anyString(), eq("user-1"));
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM002");
-        verify(unitService).upsertDummyUnitLocation("tenant-1", "WM001", "A", "East", "1");
-        verify(unitService).upsertDummyUnitLocation("tenant-1", "WM002", "B", "West", "2");
+        verify(unitService, times(2))
+                .upsertDummyUnitDetails(eq("tenant-1"), anyString(), any(DevicePreEnrollRequest.class));
     }
 
     @Test

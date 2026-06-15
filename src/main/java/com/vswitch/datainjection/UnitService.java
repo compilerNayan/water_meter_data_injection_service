@@ -200,15 +200,11 @@ public class UnitService {
     }
 
     /**
-     * Applies optional block/wing/floor from dummy-enroll. Creates a minimal enrolled unit when
-     * location fields are provided and no unit exists yet; otherwise merges into the existing unit.
+     * Applies optional unit/owner details from dummy-enroll. Creates an enrolled unit when details
+     * are provided and no unit exists yet; otherwise merges into the existing unit.
      */
-    void upsertDummyUnitLocation(
-            String tenantId, String deviceId, String block, String wing, String floor) {
-        boolean hasBlock = !isBlank(block);
-        boolean hasWing = !isBlank(wing);
-        boolean hasFloor = !isBlank(floor);
-        if (!hasBlock && !hasWing && !hasFloor) {
+    void upsertDummyUnitDetails(String tenantId, String deviceId, DevicePreEnrollRequest request) {
+        if (request == null || !request.hasUnitDetails()) {
             return;
         }
 
@@ -218,42 +214,8 @@ public class UnitService {
 
         UnitRecord updated =
                 existing
-                        .map(
-                                unit ->
-                                        new UnitRecord(
-                                                unit.unitId(),
-                                                unit.tenantId(),
-                                                unit.deviceId(),
-                                                unit.name(),
-                                                unit.flatNumber(),
-                                                hasFloor ? floor.trim() : unit.floor(),
-                                                hasBlock ? block.trim() : unit.block(),
-                                                hasWing ? wing.trim() : unit.wing(),
-                                                unit.residentName(),
-                                                unit.phoneNumber(),
-                                                unit.notes(),
-                                                unit.enrollmentStatus(),
-                                                unit.unitInviteCode(),
-                                                unit.createdAt(),
-                                                now))
-                        .orElseGet(
-                                () ->
-                                        new UnitRecord(
-                                                "wm-" + normalizedDeviceId,
-                                                tenantId,
-                                                normalizedDeviceId,
-                                                normalizedDeviceId,
-                                                "",
-                                                hasFloor ? floor.trim() : "",
-                                                hasBlock ? block.trim() : "",
-                                                hasWing ? wing.trim() : "",
-                                                "Dummy Resident",
-                                                "0000000000",
-                                                "",
-                                                UnitRecord.STATUS_ENROLLED,
-                                                generateInviteCode("", normalizedDeviceId),
-                                                now,
-                                                now));
+                        .map(unit -> mergeDummyUnitDetails(unit, request, now))
+                        .orElseGet(() -> createDummyUnitDetails(tenantId, normalizedDeviceId, request, now));
 
         dynamoDbClient.putItem(
                 PutItemRequest.builder().tableName(tableName).item(updated.toItem()).build());
@@ -264,6 +226,64 @@ public class UnitService {
         }
 
         tenantMetadataService.recomputeAndPersist(tenantId);
+    }
+
+    private static UnitRecord mergeDummyUnitDetails(
+            UnitRecord unit, DevicePreEnrollRequest request, String now) {
+        return new UnitRecord(
+                unit.unitId(),
+                unit.tenantId(),
+                unit.deviceId(),
+                pick(request.name(), unit.name()),
+                pick(request.flatNumber(), unit.flatNumber()),
+                pick(request.floor(), unit.floor()),
+                pick(request.block(), unit.block()),
+                pick(request.wing(), unit.wing()),
+                pick(request.residentName(), unit.residentName()),
+                pick(request.phoneNumber(), unit.phoneNumber()),
+                pick(request.notes(), unit.notes()),
+                unit.enrollmentStatus(),
+                unit.unitInviteCode(),
+                unit.createdAt(),
+                now);
+    }
+
+    private UnitRecord createDummyUnitDetails(
+            String tenantId, String deviceId, DevicePreEnrollRequest request, String now) {
+        String flatNumber = valueOrEmpty(request.flatNumber());
+        return new UnitRecord(
+                "wm-" + deviceId,
+                tenantId,
+                deviceId,
+                firstNonBlank(request.name(), request.flatNumber(), deviceId),
+                flatNumber,
+                valueOrEmpty(request.floor()),
+                valueOrEmpty(request.block()),
+                valueOrEmpty(request.wing()),
+                firstNonBlank(request.residentName(), "Dummy Resident"),
+                firstNonBlank(request.phoneNumber(), "0000000000"),
+                valueOrEmpty(request.notes()),
+                UnitRecord.STATUS_ENROLLED,
+                generateInviteCode(flatNumber, deviceId),
+                now,
+                now);
+    }
+
+    private static String pick(String incoming, String existing) {
+        return !isBlank(incoming) ? incoming.trim() : existing;
+    }
+
+    private static String valueOrEmpty(String value) {
+        return isBlank(value) ? "" : value.trim();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (!isBlank(value)) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {
