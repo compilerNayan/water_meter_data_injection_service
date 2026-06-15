@@ -14,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.vswitch.datainjection.device.DeviceFacade;
+
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
@@ -28,15 +30,21 @@ public class UnitService {
     private final String tableName;
     private final String tenantIdIndexName;
     private final TenantMetadataService tenantMetadataService;
+    private final PreEnrollRepository preEnrollRepository;
+    private final DeviceFacade deviceFacade;
 
     UnitService(
             DynamoDbClient dynamoDbClient,
             @Value("${units.table.name:WaterMeterUnits}") String tableName,
-            @Autowired @Lazy TenantMetadataService tenantMetadataService) {
+            @Autowired @Lazy TenantMetadataService tenantMetadataService,
+            PreEnrollRepository preEnrollRepository,
+            DeviceFacade deviceFacade) {
         this.dynamoDbClient = dynamoDbClient;
         this.tableName = tableName;
         this.tenantIdIndexName = "tenantId-index";
         this.tenantMetadataService = tenantMetadataService;
+        this.preEnrollRepository = preEnrollRepository;
+        this.deviceFacade = deviceFacade;
     }
 
     UnitResponse createUnit(String tenantId, CreateUnitRequest request) {
@@ -51,6 +59,9 @@ public class UnitService {
         String now = Instant.now().toString();
         String unitId = "wm-" + deviceId;
         String inviteCode = generateInviteCode(request.flatNumber(), deviceId);
+        boolean dummyEnrolled = isDummyEnrolled(tenantId, deviceId);
+        String enrollmentStatus =
+                dummyEnrolled ? UnitRecord.STATUS_ENROLLED : UnitRecord.STATUS_PENDING;
 
         UnitRecord unit =
                 new UnitRecord(
@@ -65,13 +76,18 @@ public class UnitService {
                         nullToEmpty(request.residentName()),
                         nullToEmpty(request.phoneNumber()),
                         nullToEmpty(request.notes()),
-                        UnitRecord.STATUS_PENDING,
+                        enrollmentStatus,
                         inviteCode,
                         now,
                         now);
 
         dynamoDbClient.putItem(
                 PutItemRequest.builder().tableName(tableName).item(unit.toItem()).build());
+
+        if (dummyEnrolled) {
+            deviceFacade.initializeDeviceConfig(deviceId, tenantId);
+            deviceFacade.initializeDeviceState(deviceId, tenantId);
+        }
 
         tenantMetadataService.recomputeAndPersist(tenantId);
         return unit.toResponse();
@@ -145,15 +161,35 @@ public class UnitService {
     }
 
     EnrollmentStatusResponse getEnrollmentStatus(String tenantId, String deviceId) {
-        UnitRecord unit =
-                findByTenantAndDeviceId(tenantId, deviceId.trim())
-                        .orElseThrow(
-                                () ->
-                                        new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND, "Unit not found"));
+        String normalizedDeviceId = deviceId.trim();
+        Optional<UnitRecord> unit = findByTenantAndDeviceId(tenantId, normalizedDeviceId);
+        if (unit.isPresent()) {
+            boolean enrolled = UnitRecord.STATUS_ENROLLED.equals(unit.get().enrollmentStatus());
+            return new EnrollmentStatusResponse(enrolled, unit.get().enrollmentStatus());
+        }
 
-        boolean enrolled = UnitRecord.STATUS_ENROLLED.equals(unit.enrollmentStatus());
-        return new EnrollmentStatusResponse(enrolled, unit.enrollmentStatus());
+        return preEnrollRepository
+                .findBySerialNumber(normalizedDeviceId)
+                .filter(preEnroll -> tenantId.equals(preEnroll.tenantId()))
+                .filter(
+                        preEnroll ->
+                                PreEnrollRepository.STATUS_ENROLLED.equals(preEnroll.status()))
+                .map(
+                        preEnroll ->
+                                new EnrollmentStatusResponse(
+                                        true, PreEnrollRepository.STATUS_ENROLLED))
+                .orElseThrow(
+                        () ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "Unit not found"));
+    }
+
+    boolean isDummyEnrolled(String tenantId, String deviceId) {
+        return preEnrollRepository
+                .findBySerialNumber(deviceId.trim())
+                .filter(preEnroll -> tenantId.equals(preEnroll.tenantId()))
+                .filter(preEnroll -> PreEnrollRepository.STATUS_ENROLLED.equals(preEnroll.status()))
+                .isPresent();
     }
 
     Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {

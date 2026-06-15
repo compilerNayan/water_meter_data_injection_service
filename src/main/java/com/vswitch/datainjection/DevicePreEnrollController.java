@@ -27,4 +27,14 @@ public class DevicePreEnrollController {
                 devicePreEnrollService.preEnroll(jwt.getSubject(), tenantId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @PostMapping("/tenants/{tenantId}/devices/dummy-enroll")
+    ResponseEntity<DevicePreEnrollResponse> dummyEnrollDevice(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable String tenantId,
+            @RequestBody DevicePreEnrollRequest request) {
+        DevicePreEnrollResponse response =
+                devicePreEnrollService.dummyEnroll(jwt.getSubject(), tenantId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
 }

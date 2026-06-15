@@ -21,41 +21,30 @@ public class DevicePreEnrollService {
     private final DynamoDbClient dynamoDbClient;
     private final UserService userService;
     private final PreEnrollRepository preEnrollRepository;
+    private final UnitService unitService;
+    private final EnrollmentCompletionService enrollmentCompletionService;
     private final String tableName;
 
     DevicePreEnrollService(
             DynamoDbClient dynamoDbClient,
             UserService userService,
             PreEnrollRepository preEnrollRepository,
+            UnitService unitService,
+            EnrollmentCompletionService enrollmentCompletionService,
             @Value("${pre.enroll.table.name:WaterMeterDevicePreEnrollments}")
                     String tableName) {
         this.dynamoDbClient = dynamoDbClient;
         this.userService = userService;
         this.preEnrollRepository = preEnrollRepository;
+        this.unitService = unitService;
+        this.enrollmentCompletionService = enrollmentCompletionService;
         this.tableName = tableName;
     }
 
     DevicePreEnrollResponse preEnroll(
             String userId, String tenantId, DevicePreEnrollRequest request) {
         validateRequest(request);
-
-        UserRecord user =
-                userService
-                        .findById(userId)
-                        .orElseThrow(
-                                () ->
-                                        new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND, "User not registered"));
-
-        if (user.tenantId() == null || user.tenantId().isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "User is not associated with a tenant");
-        }
-
-        if (!user.tenantId().equals(tenantId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "Tenant does not match authenticated user");
-        }
+        validateTenantMember(userId, tenantId);
 
         String serialNumber = request.serialNumber().trim();
         Instant now = Instant.now();
@@ -79,6 +68,44 @@ public class DevicePreEnrollService {
 
         return new DevicePreEnrollResponse(
                 tenantId, serialNumber, STATUS_PENDING, expiresAt.toString());
+    }
+
+    /**
+     * Associates a serial with the tenant (like pre-enroll) and immediately marks it enrolled.
+     * Used for dummy / test devices that skip real fleet provisioning.
+     */
+    DevicePreEnrollResponse dummyEnroll(
+            String userId, String tenantId, DevicePreEnrollRequest request) {
+        validateRequest(request);
+        validateTenantMember(userId, tenantId);
+
+        String serialNumber = request.serialNumber().trim();
+        Instant now = Instant.now();
+        String nowStr = now.toString();
+        Instant expiresAt = now.plus(10, ChronoUnit.MINUTES);
+
+        preEnrollRepository.save(
+                new DevicePreEnrollRecord(
+                        serialNumber,
+                        tenantId,
+                        PreEnrollRepository.STATUS_ENROLLED,
+                        nowStr,
+                        expiresAt.toString(),
+                        userId,
+                        nowStr));
+
+        unitService
+                .findByTenantAndDeviceId(tenantId, serialNumber)
+                .ifPresent(
+                        unit -> {
+                            if (UnitRecord.STATUS_PENDING.equals(unit.enrollmentStatus())) {
+                                enrollmentCompletionService.onEnrolled(
+                                        tenantId, serialNumber, nowStr);
+                            }
+                        });
+
+        return new DevicePreEnrollResponse(
+                tenantId, serialNumber, PreEnrollRepository.STATUS_ENROLLED, expiresAt.toString());
     }
 
     public DeviceTenantLookupResponse lookupTenantBySerial(String serialNumber) {
@@ -110,6 +137,26 @@ public class DevicePreEnrollService {
                 || request.serialNumber().isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "serialNumber is required");
+        }
+    }
+
+    private void validateTenantMember(String userId, String tenantId) {
+        UserRecord user =
+                userService
+                        .findById(userId)
+                        .orElseThrow(
+                                () ->
+                                        new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND, "User not registered"));
+
+        if (user.tenantId() == null || user.tenantId().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "User is not associated with a tenant");
+        }
+
+        if (!user.tenantId().equals(tenantId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Tenant does not match authenticated user");
         }
     }
 }
