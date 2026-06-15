@@ -1,6 +1,7 @@
 package com.vswitch.datainjection.live;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -18,9 +19,11 @@ public record LiveUpdateMessage(
         String periodStart,
         String action,
         String code,
-        String message) {
+        String message,
+        List<WaterFlowTickDevice> devices) {
 
     public static final String TYPE_WATER_FLOW = "water_flow";
+    public static final String TYPE_WATER_FLOW_TICK = "water_flow_tick";
     public static final String TYPE_BUCKET_30M = "bucket_30m";
     public static final String TYPE_DEVICE_PRESENCE = "device_presence";
     public static final String TYPE_SUBSCRIBED = "subscribed";
@@ -47,7 +50,27 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 null,
+                null,
                 null);
+    }
+
+    public static LiveUpdateMessage waterFlowTick(
+            String tenantId, Instant tickTs, List<WaterFlowTickDevice> devices) {
+        return new LiveUpdateMessage(
+                TYPE_WATER_FLOW_TICK,
+                tenantId,
+                null,
+                null,
+                tickTs.toString(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                devices);
     }
 
     public static LiveUpdateMessage bucket30m(
@@ -64,6 +87,7 @@ public record LiveUpdateMessage(
                 null,
                 periodStart.toString(),
                 "refresh",
+                null,
                 null,
                 null);
     }
@@ -83,6 +107,7 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -90,6 +115,7 @@ public record LiveUpdateMessage(
         return new LiveUpdateMessage(
                 TYPE_SUBSCRIBED,
                 tenantId,
+                null,
                 null,
                 null,
                 null,
@@ -117,6 +143,7 @@ public record LiveUpdateMessage(
                 null,
                 null,
                 code,
-                message);
+                message,
+                null);
     }
 }

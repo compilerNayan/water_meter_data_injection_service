@@ -69,12 +69,12 @@ class DeviceStreamIngestionServiceTest {
                 .broadcast(eq("63tk0y1"), captor.capture());
         LiveUpdateMessage message =
                 captor.getAllValues().stream()
-                        .filter(item -> LiveUpdateMessage.TYPE_WATER_FLOW.equals(item.type()))
+                        .filter(item -> LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(item.type()))
                         .findFirst()
                         .orElseThrow();
-        assertEquals("QJPDXN094", message.deviceId());
-        assertEquals(45, message.ml());
-        assertEquals(123.456, message.cumulativeLiters());
+        assertEquals("QJPDXN094", message.devices().get(0).deviceId());
+        assertEquals(45, message.devices().get(0).ml());
+        assertEquals(123.456, message.devices().get(0).cumulativeLiters());
     }
 
     @Test
@@ -100,7 +100,8 @@ class DeviceStreamIngestionServiceTest {
                         eq("63tk0y1"),
                         org.mockito.ArgumentMatchers.argThat(
                                 message ->
-                                        LiveUpdateMessage.TYPE_WATER_FLOW.equals(message.type())));
+                                        LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(
+                                                message.type())));
     }
 
     @Test

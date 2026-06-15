@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
+import com.vswitch.datainjection.live.WaterFlowTickDevice;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
@@ -64,9 +65,26 @@ class WaterFlowLiveBroadcastGateTest {
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
         verify(liveUpdateBroadcaster, times(1)).broadcast(eq("tenant-1"), captor.capture());
         LiveUpdateMessage message = captor.getValue();
-        assertEquals(LiveUpdateMessage.TYPE_WATER_FLOW, message.type());
-        assertEquals(149, message.cumulativeLiters(), 0.001);
-        assertEquals(now.minusSeconds(1).toString(), message.ts());
+        assertEquals(LiveUpdateMessage.TYPE_WATER_FLOW_TICK, message.type());
+        assertEquals(1, message.devices().size());
+        WaterFlowTickDevice device = message.devices().get(0);
+        assertEquals("WM001", device.deviceId());
+        assertEquals(149, device.cumulativeLiters(), 0.001);
+        assertEquals(now.minusSeconds(1).toString(), device.ts());
+    }
+
+    @Test
+    void batchesMultipleDevicesIntoOneTick() {
+        gate.offer(pulse("WM001", now.minusSeconds(1), 100), 2.7);
+        gate.offer(pulse("WM002", now.minusSeconds(1), 200), 3.0);
+
+        gate.flushNowForTests("WM001");
+
+        ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
+        verify(liveUpdateBroadcaster, times(1)).broadcast(eq("tenant-1"), captor.capture());
+        LiveUpdateMessage message = captor.getValue();
+        assertEquals(LiveUpdateMessage.TYPE_WATER_FLOW_TICK, message.type());
+        assertEquals(2, message.devices().size());
     }
 
     @Test
@@ -84,14 +102,15 @@ class WaterFlowLiveBroadcastGateTest {
                         eq("tenant-1"),
                         org.mockito.ArgumentMatchers.argThat(
                                 message ->
-                                        LiveUpdateMessage.TYPE_WATER_FLOW.equals(message.type())));
+                                        LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(
+                                                message.type())));
     }
 
     @Test
     void rateLimitsToOneBroadcastPerSecond() {
-        gate.offer(pulse(now.minusSeconds(1), 100), 2.7);
+        gate.offer(pulse("WM001", now.minusSeconds(1), 100), 2.7);
         gate.flushNowForTests("WM001");
-        gate.offer(pulse(now.minusSeconds(1), 110), 2.7);
+        gate.offer(pulse("WM001", now.minusSeconds(1), 110), 2.7);
         gate.flushNowForTests("WM001");
 
         verify(liveUpdateBroadcaster, times(1))
@@ -99,11 +118,17 @@ class WaterFlowLiveBroadcastGateTest {
                         eq("tenant-1"),
                         org.mockito.ArgumentMatchers.argThat(
                                 message ->
-                                        LiveUpdateMessage.TYPE_WATER_FLOW.equals(message.type())));
+                                        LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(
+                                                message.type())));
     }
 
     private static DeviceStreamPulsePayload pulse(Instant ts, double cumulativeLiters) {
+        return pulse("WM001", ts, cumulativeLiters);
+    }
+
+    private static DeviceStreamPulsePayload pulse(
+            String deviceId, Instant ts, double cumulativeLiters) {
         return DeviceStreamPulsePayload.from(
-                "tenant-1", "WM001", "WM001", ts, 45, cumulativeLiters);
+                "tenant-1", deviceId, deviceId, ts, 45, cumulativeLiters);
     }
 }
