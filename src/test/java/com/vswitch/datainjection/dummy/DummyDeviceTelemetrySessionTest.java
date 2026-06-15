@@ -5,6 +5,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DummyDeviceTelemetrySessionTest {
@@ -68,7 +69,9 @@ class DummyDeviceTelemetrySessionTest {
         assertEquals("tenant-1", bucketResult.bucket().tenantId());
         assertEquals("WM002", bucketResult.bucket().deviceId());
         assertEquals(30, bucketResult.bucket().minutes().size());
-        assertEquals(600.0, bucketResult.bucket().minutes().get(0).ml(), 0.001);
+        double totalMinuteMl =
+                bucketResult.bucket().minutes().stream().mapToDouble(m -> m.ml()).sum();
+        assertEquals(18_000.0, totalMinuteMl, 0.001);
         assertEquals(18.0, bucketResult.bucket().cumulativeLiters(), 0.001);
     }
 
@@ -93,5 +96,31 @@ class DummyDeviceTelemetrySessionTest {
             }
         }
         assertTrue(differs);
+    }
+
+    @Test
+    void devicesHaveStaggeredIdlePhases() {
+        DummyDeviceTelemetrySession first =
+                new DummyDeviceTelemetrySession(
+                        "tenant-1", "WM001", 10, 80, Instant.parse("2026-06-15T10:00:00Z"));
+        DummyDeviceTelemetrySession second =
+                new DummyDeviceTelemetrySession(
+                        "tenant-1", "WM002", 10, 80, Instant.parse("2026-06-15T10:00:00Z"));
+
+        assertNotEquals(
+                DummyTelemetryPolicy.initialCycleSecond("tenant-1", "WM001"),
+                DummyTelemetryPolicy.initialCycleSecond("tenant-1", "WM002"));
+
+        Instant now = Instant.parse("2026-06-15T10:00:00Z");
+        boolean sawDifferentPhase = false;
+        for (int i = 0; i < DummyTelemetryPolicy.SECONDS_PER_CYCLE; i++) {
+            var a = first.tick(now.plusSeconds(i));
+            var b = second.tick(now.plusSeconds(i));
+            if ((a.pulseMl() == 0) != (b.pulseMl() == 0)) {
+                sawDifferentPhase = true;
+                break;
+            }
+        }
+        assertTrue(sawDifferentPhase, "devices should not idle and flow in lockstep");
     }
 }

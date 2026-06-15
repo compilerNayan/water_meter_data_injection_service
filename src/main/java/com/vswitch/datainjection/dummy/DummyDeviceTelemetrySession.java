@@ -3,7 +3,6 @@ package com.vswitch.datainjection.dummy;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -41,6 +40,7 @@ final class DummyDeviceTelemetrySession {
         this.minMl = minMl;
         this.maxMl = maxMl;
         this.random = new Random(serialNumber.hashCode() ^ tenantId.hashCode());
+        this.cycleSecond = DummyTelemetryPolicy.initialCycleSecond(tenantId, serialNumber);
         this.periodStart = alignPeriodStart(startedAt);
         this.currentMinuteStart = startedAt.truncatedTo(ChronoUnit.SECONDS);
     }

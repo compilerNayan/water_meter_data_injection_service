@@ -9,5 +9,11 @@ public final class DummyTelemetryPolicy {
     public static final int MINUTES_PER_BUCKET = 30;
     public static final double DEFAULT_VALVE_TARGET_PERCENT = 100.0;
 
+    /** Per-device offset so idle windows do not align across the fleet. */
+    public static int initialCycleSecond(String tenantId, String serialNumber) {
+        long seed = serialNumber.hashCode() ^ ((long) tenantId.hashCode() << 32);
+        return Math.floorMod(seed, SECONDS_PER_CYCLE);
+    }
+
     private DummyTelemetryPolicy() {}
 }
