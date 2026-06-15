@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
+import com.vswitch.datainjection.dummy.DummyDeviceTelemetrySimulator;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -35,6 +37,7 @@ public class DevicePreEnrollService {
     private final EnrollmentCompletionService enrollmentCompletionService;
     private final DummyDeviceRepository dummyDeviceRepository;
     private final DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
+    private final DummyDeviceTelemetrySimulator dummyDeviceTelemetrySimulator;
     private final ExecutorService dummyBulkEnrollExecutor;
     private final String tableName;
     private final int maxBulkDummyEnroll;
@@ -47,6 +50,7 @@ public class DevicePreEnrollService {
             EnrollmentCompletionService enrollmentCompletionService,
             DummyDeviceRepository dummyDeviceRepository,
             DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService,
+            @Autowired(required = false) DummyDeviceTelemetrySimulator dummyDeviceTelemetrySimulator,
             @Qualifier("dummyBulkEnrollExecutor") ExecutorService dummyBulkEnrollExecutor,
             @Value("${pre.enroll.table.name:WaterMeterDevicePreEnrollments}")
                     String tableName,
@@ -58,6 +62,7 @@ public class DevicePreEnrollService {
         this.enrollmentCompletionService = enrollmentCompletionService;
         this.dummyDeviceRepository = dummyDeviceRepository;
         this.dummyHistoricalBackfillService = dummyHistoricalBackfillService;
+        this.dummyDeviceTelemetrySimulator = dummyDeviceTelemetrySimulator;
         this.dummyBulkEnrollExecutor = dummyBulkEnrollExecutor;
         this.tableName = tableName;
         this.maxBulkDummyEnroll = Math.max(1, maxBulkDummyEnroll);
@@ -169,6 +174,10 @@ public class DevicePreEnrollService {
                         nowStr));
 
         dummyDeviceRepository.register(tenantId, serialNumber, nowStr, userId);
+
+        if (dummyDeviceTelemetrySimulator != null) {
+            dummyDeviceTelemetrySimulator.registerDevice(tenantId, serialNumber);
+        }
 
         unitService.upsertDummyUnitDetails(tenantId, serialNumber, request);
 

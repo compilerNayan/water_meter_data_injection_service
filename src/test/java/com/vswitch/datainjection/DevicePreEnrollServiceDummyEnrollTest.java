@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
+import com.vswitch.datainjection.dummy.DummyDeviceTelemetrySimulator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +31,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private DummyDeviceRepository dummyDeviceRepository;
     @Mock private DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
+    @Mock private DummyDeviceTelemetrySimulator dummyDeviceTelemetrySimulator;
     @Mock private ExecutorService dummyBulkEnrollExecutor;
 
     private DevicePreEnrollService service;
@@ -45,6 +47,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
                         enrollmentCompletionService,
                         dummyDeviceRepository,
                         dummyHistoricalBackfillService,
+                        dummyDeviceTelemetrySimulator,
                         dummyBulkEnrollExecutor,
                         "WaterMeterDevicePreEnrollments",
                         1000);
@@ -104,6 +107,7 @@ class DevicePreEnrollServiceDummyEnrollTest {
         assertTrue(captor.getValue().enrolledAt() != null && !captor.getValue().enrolledAt().isBlank());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
+        verify(dummyDeviceTelemetrySimulator).registerDevice("tenant-1", "WM001");
         verify(unitService).upsertDummyUnitDetails(eq("tenant-1"), eq("WM001"), any(DevicePreEnrollRequest.class));
         verify(enrollmentCompletionService)
                 .onEnrolled(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString());

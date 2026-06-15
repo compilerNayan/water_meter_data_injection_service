@@ -24,13 +24,12 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 class DevicePresenceServiceTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
-    @Mock private DeviceFacade deviceFacade;
 
     private DevicePresenceService presenceService;
 
     @BeforeEach
     void setUp() {
-        presenceService = new DevicePresenceService(liveUpdateBroadcaster, deviceFacade);
+        presenceService = new DevicePresenceService(liveUpdateBroadcaster);
     }
 
     @Test
@@ -40,7 +39,6 @@ class DevicePresenceServiceTest {
         presenceService.recordPulse("tenant-1", "WM001", ts);
 
         assertTrue(presenceService.isOnline("WM001"));
-        verify(deviceFacade).touchHeartbeat("tenant-1", "WM001", ts);
 
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
         verify(liveUpdateBroadcaster).broadcast(eq("tenant-1"), captor.capture());

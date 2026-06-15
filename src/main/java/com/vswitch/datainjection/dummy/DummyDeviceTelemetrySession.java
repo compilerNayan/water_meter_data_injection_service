@@ -67,6 +67,10 @@ final class DummyDeviceTelemetrySession {
             result.pulseMl(ml);
             result.pulseTimestamp(now.truncatedTo(ChronoUnit.SECONDS));
             result.cumulativeLiters(cumulativeLiters);
+        } else {
+            result.pulseMl(0);
+            result.pulseTimestamp(now.truncatedTo(ChronoUnit.SECONDS));
+            result.cumulativeLiters(cumulativeLiters);
         }
 
         if (cycleSecond == DummyTelemetryPolicy.PULSES_PER_ACTIVE_MINUTE - 1) {

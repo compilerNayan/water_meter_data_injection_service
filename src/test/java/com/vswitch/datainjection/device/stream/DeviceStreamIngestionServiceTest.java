@@ -35,14 +35,14 @@ class DeviceStreamIngestionServiceTest {
     @BeforeEach
     void setUp() {
         store = new DeviceLiveTelemetryStore();
-        presenceService = new DevicePresenceService(liveUpdateBroadcaster, deviceFacade);
+        presenceService = new DevicePresenceService(liveUpdateBroadcaster);
         broadcastGate =
                 new WaterFlowLiveBroadcastGate(
                         liveUpdateBroadcaster,
                         Clock.fixed(Instant.parse("2026-06-13T10:00:05Z"), ZoneOffset.UTC),
                         Executors.newSingleThreadScheduledExecutor());
         service =
-                new DeviceStreamIngestionService(store, presenceService, broadcastGate);
+                new DeviceStreamIngestionService(store, presenceService, broadcastGate, deviceFacade);
     }
 
     @Test
@@ -51,6 +51,8 @@ class DeviceStreamIngestionServiceTest {
         service.ingestPulse(
                 DeviceStreamPulsePayload.from(
                         "63tk0y1", "QJPDXN094", null, ts, 45, 123.456));
+
+        verify(deviceFacade).ingestSecondPulse("63tk0y1", "QJPDXN094", ts, 45);
 
         DeviceLiveTelemetrySnapshot snapshot =
                 store.find("QJPDXN094").orElseThrow();
@@ -77,14 +79,17 @@ class DeviceStreamIngestionServiceTest {
 
     @Test
     void storesPulseWithoutBroadcastingWaterFlowWhenMlZero() {
+        Instant ts = Instant.parse("2026-06-13T10:00:05Z");
         service.ingestPulse(
                 DeviceStreamPulsePayload.from(
                         "63tk0y1",
                         "QJPDXN094",
                         null,
-                        Instant.parse("2026-06-13T10:00:05Z"),
+                        ts,
                         0,
                         120.0));
+
+        verify(deviceFacade).touchHeartbeat("63tk0y1", "QJPDXN094", ts);
 
         assertTrue(store.find("QJPDXN094").isPresent());
         ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);

@@ -13,6 +13,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
+
 import com.vswitch.datainjection.DummyDeviceRecord;
 import com.vswitch.datainjection.DummyDeviceRepository;
 import com.vswitch.datainjection.device.ThirtyMinuteBucketIngestionService;
@@ -57,7 +59,12 @@ public class DummyDeviceTelemetrySimulator {
         this.registryRefreshMillis = Math.max(5, registryRefreshSeconds) * 1000L;
     }
 
-    @Scheduled(fixedRate = 1000, initialDelay = 5000)
+    @PostConstruct
+    void warmRegistry() {
+        refreshSessionsIfNeeded();
+    }
+
+    @Scheduled(fixedDelay = 1000, initialDelay = 2000)
     void tickAllDevices() {
         refreshSessionsIfNeeded();
         Instant now = clock.instant();
@@ -72,6 +79,23 @@ public class DummyDeviceTelemetrySimulator {
                         e);
             }
         }
+    }
+
+    public void registerDevice(String tenantId, String serialNumber) {
+        if (tenantId == null
+                || tenantId.isBlank()
+                || serialNumber == null
+                || serialNumber.isBlank()) {
+            return;
+        }
+        String key = tenantId.trim() + "#" + serialNumber.trim().toUpperCase();
+        Instant now = clock.instant();
+        sessions.computeIfAbsent(
+                key,
+                ignored ->
+                        new DummyDeviceTelemetrySession(
+                                tenantId, serialNumber.trim().toUpperCase(), minMl, maxMl, now));
+        log.info("Dummy telemetry session started for {}/{}", tenantId, serialNumber);
     }
 
     public void evictTenant(String tenantId) {

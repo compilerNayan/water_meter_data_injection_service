@@ -10,26 +10,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DummyDeviceTelemetrySessionTest {
 
     @Test
-    void emitsPulseOnlyDuringActiveSeconds() {
+    void emitsPulseEverySecondIncludingIdleHeartbeats() {
         DummyDeviceTelemetrySession session =
                 new DummyDeviceTelemetrySession(
                         "tenant-1", "WM001", 10, 80, Instant.parse("2026-06-15T10:00:00Z"));
 
         Instant start = Instant.parse("2026-06-15T10:00:00Z");
-        int pulseCount = 0;
-        int idleCount = 0;
+        int flowPulseCount = 0;
+        int heartbeatCount = 0;
         for (int i = 0; i < 70; i++) {
             var result = session.tick(start.plusSeconds(i));
-            if (result.hasPulse()) {
-                pulseCount++;
+            assertTrue(result.hasPulse());
+            if (result.pulseMl() > 0) {
+                flowPulseCount++;
                 assertTrue(result.pulseMl() >= 10 && result.pulseMl() <= 80);
             } else {
-                idleCount++;
+                heartbeatCount++;
             }
         }
 
-        assertEquals(60, pulseCount);
-        assertEquals(10, idleCount);
+        assertEquals(60, flowPulseCount);
+        assertEquals(10, heartbeatCount);
     }
 
     @Test

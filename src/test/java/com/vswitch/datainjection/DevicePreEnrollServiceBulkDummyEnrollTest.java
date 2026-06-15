@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vswitch.datainjection.dummy.DummyDeviceHistoricalBackfillService;
+import com.vswitch.datainjection.dummy.DummyDeviceTelemetrySimulator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,6 +36,7 @@ class DevicePreEnrollServiceBulkDummyEnrollTest {
     @Mock private EnrollmentCompletionService enrollmentCompletionService;
     @Mock private DummyDeviceRepository dummyDeviceRepository;
     @Mock private DummyDeviceHistoricalBackfillService dummyHistoricalBackfillService;
+    @Mock private DummyDeviceTelemetrySimulator dummyDeviceTelemetrySimulator;
     @Mock private ExecutorService dummyBulkEnrollExecutor;
 
     private DevicePreEnrollService service;
@@ -50,6 +52,7 @@ class DevicePreEnrollServiceBulkDummyEnrollTest {
                         enrollmentCompletionService,
                         dummyDeviceRepository,
                         dummyHistoricalBackfillService,
+                        dummyDeviceTelemetrySimulator,
                         dummyBulkEnrollExecutor,
                         "WaterMeterDevicePreEnrollments",
                         1000);

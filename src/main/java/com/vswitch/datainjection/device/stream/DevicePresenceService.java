@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
-import com.vswitch.datainjection.device.DeviceFacade;
 
 @Service
 public class DevicePresenceService {
@@ -22,12 +21,9 @@ public class DevicePresenceService {
 
     private final Map<String, PresenceEntry> byDevice = new ConcurrentHashMap<>();
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
-    private final DeviceFacade deviceFacade;
 
-    DevicePresenceService(
-            TenantLiveUpdateBroadcaster liveUpdateBroadcaster, DeviceFacade deviceFacade) {
+    DevicePresenceService(TenantLiveUpdateBroadcaster liveUpdateBroadcaster) {
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
-        this.deviceFacade = deviceFacade;
     }
 
     public void recordPulse(String tenantId, String deviceId, Instant receivedAt) {
@@ -42,12 +38,6 @@ public class DevicePresenceService {
         PresenceEntry previous = byDevice.get(key);
         boolean wasOnline = previous != null && previous.online();
         byDevice.put(key, new PresenceEntry(tenantId, deviceId, receivedAt, true));
-
-        try {
-            deviceFacade.touchHeartbeat(tenantId, deviceId, receivedAt);
-        } catch (Exception e) {
-            log.debug("Failed to persist heartbeat for {}", deviceId, e);
-        }
 
         if (!wasOnline) {
             broadcastPresence(tenantId, deviceId, true, receivedAt);
