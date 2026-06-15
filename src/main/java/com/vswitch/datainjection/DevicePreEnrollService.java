@@ -104,6 +104,13 @@ public class DevicePreEnrollService {
 
         dummyDeviceRepository.register(tenantId, serialNumber, nowStr, userId);
 
+        unitService.upsertDummyUnitLocation(
+                tenantId,
+                serialNumber,
+                request.block(),
+                request.wing(),
+                request.floor());
+
         unitService
                 .findByTenantAndDeviceId(tenantId, serialNumber)
                 .ifPresent(

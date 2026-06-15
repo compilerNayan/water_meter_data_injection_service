@@ -199,6 +199,73 @@ public class UnitService {
         return dummyDeviceRepository.isDummy(tenantId, deviceId);
     }
 
+    /**
+     * Applies optional block/wing/floor from dummy-enroll. Creates a minimal enrolled unit when
+     * location fields are provided and no unit exists yet; otherwise merges into the existing unit.
+     */
+    void upsertDummyUnitLocation(
+            String tenantId, String deviceId, String block, String wing, String floor) {
+        boolean hasBlock = !isBlank(block);
+        boolean hasWing = !isBlank(wing);
+        boolean hasFloor = !isBlank(floor);
+        if (!hasBlock && !hasWing && !hasFloor) {
+            return;
+        }
+
+        String normalizedDeviceId = deviceId.trim();
+        String now = Instant.now().toString();
+        Optional<UnitRecord> existing = findByTenantAndDeviceId(tenantId, normalizedDeviceId);
+
+        UnitRecord updated =
+                existing
+                        .map(
+                                unit ->
+                                        new UnitRecord(
+                                                unit.unitId(),
+                                                unit.tenantId(),
+                                                unit.deviceId(),
+                                                unit.name(),
+                                                unit.flatNumber(),
+                                                hasFloor ? floor.trim() : unit.floor(),
+                                                hasBlock ? block.trim() : unit.block(),
+                                                hasWing ? wing.trim() : unit.wing(),
+                                                unit.residentName(),
+                                                unit.phoneNumber(),
+                                                unit.notes(),
+                                                unit.enrollmentStatus(),
+                                                unit.unitInviteCode(),
+                                                unit.createdAt(),
+                                                now))
+                        .orElseGet(
+                                () ->
+                                        new UnitRecord(
+                                                "wm-" + normalizedDeviceId,
+                                                tenantId,
+                                                normalizedDeviceId,
+                                                normalizedDeviceId,
+                                                "",
+                                                hasFloor ? floor.trim() : "",
+                                                hasBlock ? block.trim() : "",
+                                                hasWing ? wing.trim() : "",
+                                                "Dummy Resident",
+                                                "0000000000",
+                                                "",
+                                                UnitRecord.STATUS_ENROLLED,
+                                                generateInviteCode("", normalizedDeviceId),
+                                                now,
+                                                now));
+
+        dynamoDbClient.putItem(
+                PutItemRequest.builder().tableName(tableName).item(updated.toItem()).build());
+
+        if (existing.isEmpty()) {
+            deviceFacade.initializeDeviceConfig(normalizedDeviceId, tenantId);
+            deviceFacade.initializeDeviceState(normalizedDeviceId, tenantId);
+        }
+
+        tenantMetadataService.recomputeAndPersist(tenantId);
+    }
+
     Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {
         var response =
                 dynamoDbClient.query(
