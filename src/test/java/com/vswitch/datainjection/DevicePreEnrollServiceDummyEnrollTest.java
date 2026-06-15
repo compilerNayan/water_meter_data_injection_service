@@ -85,6 +85,9 @@ class DevicePreEnrollServiceDummyEnrollTest {
         assertTrue(captor.getValue().enrolledAt() != null && !captor.getValue().enrolledAt().isBlank());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
+        verify(unitService)
+                .upsertDummyUnitLocation(
+                        eq("tenant-1"), eq("WM001"), eq(null), eq(null), eq(null));
         verify(enrollmentCompletionService)
                 .onEnrolled(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString());
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
@@ -117,11 +120,43 @@ class DevicePreEnrollServiceDummyEnrollTest {
         verify(preEnrollRepository).save(org.mockito.ArgumentMatchers.any());
         verify(dummyDeviceRepository)
                 .register(eq("tenant-1"), eq("WM001"), org.mockito.ArgumentMatchers.anyString(), eq("user-1"));
+        verify(unitService)
+                .upsertDummyUnitLocation(
+                        eq("tenant-1"), eq("WM001"), eq(null), eq(null), eq(null));
         verify(dummyHistoricalBackfillService).scheduleBackfill("tenant-1", "WM001");
         verify(enrollmentCompletionService, org.mockito.Mockito.never())
                 .onEnrolled(
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void dummyEnrollPassesLocationFieldsToUnitService() {
+        when(userService.findById("user-1"))
+                .thenReturn(
+                        Optional.of(
+                                new UserRecord(
+                                        "user-1",
+                                        "a@test.com",
+                                        "",
+                                        "A",
+                                        "B",
+                                        "A B",
+                                        "tenant-1",
+                                        true,
+                                        false,
+                                        Instant.now().toString(),
+                                        Instant.now().toString())));
+        when(unitService.findByTenantAndDeviceId("tenant-1", "WM003")).thenReturn(Optional.empty());
+
+        service.dummyEnroll(
+                "user-1",
+                "tenant-1",
+                new DevicePreEnrollRequest("WM003", "Block-A", "North", "7"));
+
+        verify(unitService)
+                .upsertDummyUnitLocation(
+                        "tenant-1", "WM003", "Block-A", "North", "7");
     }
 }
