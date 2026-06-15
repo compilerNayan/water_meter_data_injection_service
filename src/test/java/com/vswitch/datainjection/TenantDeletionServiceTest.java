@@ -158,6 +158,70 @@ class TenantDeletionServiceTest {
     }
 
     @Test
+    void continuesWhenDummyDeviceRegistryUnavailable() {
+        UnitRecord unit =
+                new UnitRecord(
+                        "wm-WM000001",
+                        TENANT_ID,
+                        "WM000001",
+                        "D205",
+                        "D205",
+                        "2",
+                        "A",
+                        "East",
+                        "Resident",
+                        "+1",
+                        "",
+                        UnitRecord.STATUS_ENROLLED,
+                        "D205-1234",
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:00:00Z");
+        UserRecord owner =
+                new UserRecord(
+                        OWNER_ID,
+                        "owner@example.com",
+                        "",
+                        "Owner",
+                        "User",
+                        "Owner User",
+                        TENANT_ID,
+                        true,
+                        true,
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:00:00Z");
+        TenantRecord tenant =
+                new TenantRecord(
+                        TENANT_ID,
+                        "Tower A",
+                        OWNER_ID,
+                        "{\"blocks\":[]}",
+                        "2026-01-01T00:00:00Z",
+                        "2026-01-01T00:00:00Z",
+                        "",
+                        "",
+                        "");
+
+        doNothing().when(userService).requireTenantOwner(OWNER_ID, TENANT_ID);
+        when(tenantService.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
+        when(unitService.listUnitRecords(TENANT_ID)).thenReturn(List.of(unit));
+        when(preEnrollRepository.listByTenant(TENANT_ID)).thenReturn(List.of());
+        when(dummyDeviceRepository.listByTenant(TENANT_ID))
+                .thenThrow(
+                        new RuntimeException(
+                                "not authorized to perform: dynamodb:Scan on WaterMeterDummyDevices"));
+        when(preEnrollRepository.deleteAllForTenant(TENANT_ID)).thenReturn(0);
+        when(dummyDeviceRepository.deleteAllForTenant(TENANT_ID)).thenReturn(0);
+        when(userService.listByTenant(TENANT_ID)).thenReturn(List.of(owner));
+
+        TenantDeletionResponse response = service.deleteTenant(OWNER_ID, TENANT_ID);
+
+        verify(deviceStore).deleteAllDeviceData("WM000001");
+        verify(tenantService).deleteTenant(TENANT_ID);
+        assertTrue(response.tenantDeleted());
+        assertEquals(1, response.unitsDeleted());
+    }
+
+    @Test
     void rejectsWhenTenantMissing() {
         doNothing().when(userService).requireTenantOwner(OWNER_ID, TENANT_ID);
         when(tenantService.findById(TENANT_ID)).thenReturn(Optional.empty());

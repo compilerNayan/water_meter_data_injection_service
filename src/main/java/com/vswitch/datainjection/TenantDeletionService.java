@@ -80,12 +80,8 @@ public class TenantDeletionService {
             unitsDeleted++;
         }
 
-        for (var preEnroll : preEnrollRepository.listByTenant(tenantId)) {
-            deviceIds.add(preEnroll.serialNumber());
-        }
-        for (DummyDeviceRecord dummy : dummyDeviceRepository.listByTenant(tenantId)) {
-            deviceIds.add(dummy.serialNumber());
-        }
+        collectPreEnrollDeviceIds(tenantId, deviceIds);
+        collectDummyDeviceIds(tenantId, deviceIds);
 
         for (String deviceId : deviceIds) {
             deviceStore.deleteAllDeviceData(deviceId);
@@ -93,10 +89,10 @@ public class TenantDeletionService {
             deviceDataSetsDeleted++;
         }
 
-        int preEnrollmentsDeleted = preEnrollRepository.deleteAllForTenant(tenantId);
-        int dummyDevicesDeleted = dummyDeviceRepository.deleteAllForTenant(tenantId);
+        int preEnrollmentsDeleted = deletePreEnrollmentsForTenant(tenantId);
+        int dummyDevicesDeleted = deleteDummyDevicesForTenant(tenantId);
 
-        List<UserRecord> users = userService.listByTenant(tenantId);
+        List<UserRecord> users = listUsersForTenant(tenantId, requesterUserId);
         int cognitoUsersDeleted = 0;
         for (UserRecord user : users) {
             if (cognitoUserDeletionService != null && cognitoUserDeletionService.deleteUser(user)) {
@@ -133,5 +129,81 @@ public class TenantDeletionService {
         devicePresenceService.clear(deviceId);
         liveTelemetryStore.clear(deviceId);
         waterFlowLiveBroadcastGate.clearDevice(deviceId);
+    }
+
+    private void collectPreEnrollDeviceIds(String tenantId, Set<String> deviceIds) {
+        try {
+            for (var preEnroll : preEnrollRepository.listByTenant(tenantId)) {
+                deviceIds.add(preEnroll.serialNumber());
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "Could not list pre-enrollments for tenant {} during wipe: {}",
+                    tenantId,
+                    e.toString());
+        }
+    }
+
+    private void collectDummyDeviceIds(String tenantId, Set<String> deviceIds) {
+        try {
+            for (DummyDeviceRecord dummy : dummyDeviceRepository.listByTenant(tenantId)) {
+                deviceIds.add(dummy.serialNumber());
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "Could not list dummy devices for tenant {} during wipe: {}",
+                    tenantId,
+                    e.toString());
+        }
+    }
+
+    private int deletePreEnrollmentsForTenant(String tenantId) {
+        try {
+            return preEnrollRepository.deleteAllForTenant(tenantId);
+        } catch (Exception e) {
+            log.warn(
+                    "Could not delete pre-enrollments for tenant {} during wipe: {}",
+                    tenantId,
+                    e.toString());
+            return 0;
+        }
+    }
+
+    private int deleteDummyDevicesForTenant(String tenantId) {
+        try {
+            return dummyDeviceRepository.deleteAllForTenant(tenantId);
+        } catch (Exception e) {
+            log.warn(
+                    "Could not delete dummy-device registry for tenant {} during wipe: {}",
+                    tenantId,
+                    e.toString());
+            return 0;
+        }
+    }
+
+    private List<UserRecord> listUsersForTenant(String tenantId, String requesterUserId) {
+        try {
+            return userService.listByTenant(tenantId);
+        } catch (Exception e) {
+            log.warn(
+                    "Could not scan users for tenant {} during wipe: {}",
+                    tenantId,
+                    e.toString());
+            try {
+                UserRecord requester =
+                        userService
+                                .findById(requesterUserId)
+                                .orElseThrow(
+                                        () ->
+                                                new ResponseStatusException(
+                                                        HttpStatus.NOT_FOUND, "User not found"));
+                if (tenantId.equals(requester.tenantId())) {
+                    return List.of(requester);
+                }
+            } catch (Exception ignored) {
+                // fall through
+            }
+            return List.of();
+        }
     }
 }
