@@ -1,8 +1,10 @@
 package com.vswitch.datainjection;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,48 +72,71 @@ public class TenantDeletionService {
 
         log.warn("Deleting tenant {} requested by {}", tenantId, requesterUserId);
 
-        int unitsDeleted = 0;
-        int deviceDataSetsDeleted = 0;
-        Set<String> deviceIds = new HashSet<>();
-
-        for (UnitRecord unit : unitService.listUnitRecords(tenantId)) {
-            deviceIds.add(unit.deviceId());
-            unitService.deleteUnit(unit.unitId());
-            unitsDeleted++;
+        if (dummyDeviceTelemetrySimulator != null) {
+            dummyDeviceTelemetrySimulator.evictTenant(tenantId);
         }
 
+        Set<String> deviceIds = new HashSet<>();
+        List<UnitRecord> units = unitService.listUnitRecords(tenantId);
+        for (UnitRecord unit : units) {
+            deviceIds.add(unit.deviceId());
+        }
         collectPreEnrollDeviceIds(tenantId, deviceIds);
         collectDummyDeviceIds(tenantId, deviceIds);
+        log.warn(
+                "Tenant {} wipe: collected {} device ids from {} units",
+                tenantId,
+                deviceIds.size(),
+                units.size());
 
-        for (String deviceId : deviceIds) {
-            deviceStore.deleteAllDeviceData(deviceId);
-            clearInMemoryDeviceState(deviceId);
-            deviceDataSetsDeleted++;
+        List<UserRecord> users = listUsersForTenant(tenantId, requesterUserId);
+        int cognitoUsersDeleted = 0;
+        int usersDeleted = 0;
+        for (UserRecord user : users) {
+            try {
+                if (cognitoUserDeletionService != null
+                        && cognitoUserDeletionService.deleteUser(user)) {
+                    cognitoUsersDeleted++;
+                }
+                userService.deleteUser(user.userId());
+                usersDeleted++;
+            } catch (Exception e) {
+                log.warn(
+                        "Could not delete user {} during tenant {} wipe: {}",
+                        user.userId(),
+                        tenantId,
+                        e.toString());
+            }
+        }
+
+        tenantService.deleteTenant(tenantId);
+        log.warn("Deleted tenant record {}", tenantId);
+
+        int unitsDeleted = 0;
+        for (UnitRecord unit : units) {
+            try {
+                unitService.deleteUnit(unit.unitId());
+                unitsDeleted++;
+            } catch (Exception e) {
+                log.warn(
+                        "Could not delete unit {} during tenant {} wipe: {}",
+                        unit.unitId(),
+                        tenantId,
+                        e.toString());
+            }
         }
 
         int preEnrollmentsDeleted = deletePreEnrollmentsForTenant(tenantId);
         int dummyDevicesDeleted = deleteDummyDevicesForTenant(tenantId);
 
-        List<UserRecord> users = listUsersForTenant(tenantId, requesterUserId);
-        int cognitoUsersDeleted = 0;
-        for (UserRecord user : users) {
-            if (cognitoUserDeletionService != null && cognitoUserDeletionService.deleteUser(user)) {
-                cognitoUsersDeleted++;
-            }
-            userService.deleteUser(user.userId());
-        }
-
-        tenantService.deleteTenant(tenantId);
-        if (dummyDeviceTelemetrySimulator != null) {
-            dummyDeviceTelemetrySimulator.evictTenant(tenantId);
-        }
+        int deviceDataSetsDeleted = scheduleDeviceDataDeletion(tenantId, deviceIds);
 
         log.warn(
-                "Deleted tenant {} (units={}, devices={}, users={}, cognito={})",
+                "Deleted tenant {} (units={}, deviceCleanupScheduled={}, users={}, cognito={})",
                 tenantId,
                 unitsDeleted,
                 deviceDataSetsDeleted,
-                users.size(),
+                usersDeleted,
                 cognitoUsersDeleted);
 
         return new TenantDeletionResponse(
@@ -120,9 +145,39 @@ public class TenantDeletionService {
                 deviceDataSetsDeleted,
                 preEnrollmentsDeleted,
                 dummyDevicesDeleted,
-                users.size(),
+                usersDeleted,
                 cognitoUsersDeleted,
                 true);
+    }
+
+    private int scheduleDeviceDataDeletion(String tenantId, Set<String> deviceIds) {
+        if (deviceIds.isEmpty()) {
+            return 0;
+        }
+        List<String> deviceIdList = new ArrayList<>(deviceIds);
+        CompletableFuture.runAsync(
+                () -> {
+                    int deleted = 0;
+                    for (String deviceId : deviceIdList) {
+                        try {
+                            deviceStore.deleteAllDeviceData(deviceId);
+                            clearInMemoryDeviceState(deviceId);
+                            deleted++;
+                        } catch (Exception e) {
+                            log.warn(
+                                    "Could not delete device data for {} during tenant {} wipe: {}",
+                                    deviceId,
+                                    tenantId,
+                                    e.toString());
+                        }
+                    }
+                    log.warn(
+                            "Tenant {} background device cleanup finished ({}/{} devices)",
+                            tenantId,
+                            deleted,
+                            deviceIdList.size());
+                });
+        return deviceIdList.size();
     }
 
     private void clearInMemoryDeviceState(String deviceId) {

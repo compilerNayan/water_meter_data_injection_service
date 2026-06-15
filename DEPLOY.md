@@ -348,6 +348,7 @@ GitHub rebuilds and redeploys automatically. Wait for the green check in **Actio
 | Browser shows old sample app | Wait for deploy to finish; in Beanstalk console check **Health** is green |
 | `/actuator/health` shows dynamodb **DOWN** | Do Part 2 again (Step 7) — EC2 role missing DynamoDB policy |
 | Tenant wipe returns **500** / logs show `not authorized to perform: dynamodb:Scan` on `WaterMeterDummyDevices` | On role **`aws-elasticbeanstalk-ec2-role`**, open inline policy **`WaterMeterDynamoDbAccess`** and confirm JSON includes **`dynamodb:Scan`** and **`dynamodb:DeleteItem`** on `arn:aws:dynamodb:ap-south-1:748359027058:table/WaterMeter*`. Saving the policy is not enough if it is attached to a different role. After saving, wait 1–2 minutes and retry wipe — no redeploy needed. |
+| App still shows building after wipe attempt; nginx **404** on `/water/minutes/history` | **Partial wipe**: units were deleted but tenant/user deletion failed (often IAM or request timeout). Push latest code (tenant/user deleted first; device cleanup runs in background), fix IAM on **`aws-elasticbeanstalk-ec2-role`**, then tap building name 10× again to retry wipe. |
 | Beanstalk health **Severe** | Beanstalk → your environment → **Logs** → **Request Logs** → **Last 100 Lines** |
 | Browser shows **502 Bad Gateway** | App must listen on port **5000** on Beanstalk (fixed in `Procfile`); push latest code and redeploy |
 

@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -132,14 +133,14 @@ class TenantDeletionServiceTest {
         TenantDeletionResponse response = service.deleteTenant(OWNER_ID, TENANT_ID);
 
         verify(unitService).deleteUnit(unit.unitId());
-        verify(deviceStore).deleteAllDeviceData("WM000001");
-        verify(deviceStore).deleteAllDeviceData("WM000002");
-        verify(deviceStore).deleteAllDeviceData("WM000003");
-        verify(devicePresenceService).clear("WM000001");
-        verify(devicePresenceService).clear("WM000002");
-        verify(devicePresenceService).clear("WM000003");
-        verify(liveTelemetryStore).clear("WM000001");
-        verify(waterFlowLiveBroadcastGate).clearDevice("WM000001");
+        verify(deviceStore, timeout(2000)).deleteAllDeviceData("WM000001");
+        verify(deviceStore, timeout(2000)).deleteAllDeviceData("WM000002");
+        verify(deviceStore, timeout(2000)).deleteAllDeviceData("WM000003");
+        verify(devicePresenceService, timeout(2000)).clear("WM000001");
+        verify(devicePresenceService, timeout(2000)).clear("WM000002");
+        verify(devicePresenceService, timeout(2000)).clear("WM000003");
+        verify(liveTelemetryStore, timeout(2000)).clear("WM000001");
+        verify(waterFlowLiveBroadcastGate, timeout(2000)).clearDevice("WM000001");
         verify(preEnrollRepository).deleteAllForTenant(TENANT_ID);
         verify(dummyDeviceRepository).deleteAllForTenant(TENANT_ID);
         verify(cognitoUserDeletionService).deleteUser(owner);
@@ -215,7 +216,7 @@ class TenantDeletionServiceTest {
 
         TenantDeletionResponse response = service.deleteTenant(OWNER_ID, TENANT_ID);
 
-        verify(deviceStore).deleteAllDeviceData("WM000001");
+        verify(deviceStore, timeout(2000)).deleteAllDeviceData("WM000001");
         verify(tenantService).deleteTenant(TENANT_ID);
         assertTrue(response.tenantDeleted());
         assertEquals(1, response.unitsDeleted());
