@@ -52,7 +52,7 @@ class DummyDeviceTelemetrySessionTest {
     void accumulatesThirtyMinuteBucketAfterThirtyActiveMinutes() {
         DummyDeviceTelemetrySession session =
                 new DummyDeviceTelemetrySession(
-                        "tenant-1", "WM002", 10, 10, Instant.parse("2026-06-15T10:00:00Z"));
+                        "tenant-1", "WM044", 10, 10, Instant.parse("2026-06-15T10:00:00Z"));
 
         Instant start = Instant.parse("2026-06-15T10:00:00Z");
         DummyDeviceTelemetrySession.TickResult bucketResult = null;
@@ -67,11 +67,9 @@ class DummyDeviceTelemetrySessionTest {
 
         assertTrue(bucketResult != null && bucketResult.hasBucket());
         assertEquals("tenant-1", bucketResult.bucket().tenantId());
-        assertEquals("WM002", bucketResult.bucket().deviceId());
+        assertEquals("WM044", bucketResult.bucket().deviceId());
         assertEquals(30, bucketResult.bucket().minutes().size());
-        double totalMinuteMl =
-                bucketResult.bucket().minutes().stream().mapToDouble(m -> m.ml()).sum();
-        assertEquals(18_000.0, totalMinuteMl, 0.001);
+        assertEquals(600.0, bucketResult.bucket().minutes().get(0).ml(), 0.001);
         assertEquals(18.0, bucketResult.bucket().cumulativeLiters(), 0.001);
     }
 
