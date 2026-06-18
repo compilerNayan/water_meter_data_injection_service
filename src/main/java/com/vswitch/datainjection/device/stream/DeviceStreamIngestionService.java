@@ -46,7 +46,7 @@ public class DeviceStreamIngestionService {
                         receivedAt);
         liveTelemetryStore.put(snapshot);
         persistPulse(payload);
-        presenceService.recordPulse(payload.tenantId(), payload.deviceId(), receivedAt);
+        presenceService.touchLastSeen(payload.tenantId(), payload.deviceId(), receivedAt);
         waterFlowBroadcastGate.offer(payload, flowRateLpm);
     }
 

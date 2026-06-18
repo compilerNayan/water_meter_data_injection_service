@@ -3,7 +3,10 @@ package com.vswitch.datainjection.device.stream.command;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+
+import com.vswitch.datainjection.device.stream.DeviceStreamPresenceCoordinator;
 
 @Component
 public class DeviceStreamConnectionRegistry {
@@ -11,6 +14,11 @@ public class DeviceStreamConnectionRegistry {
     private final ConcurrentHashMap<String, DeviceStreamSession> bySerial = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<DeviceStreamSession, String> serialBySession =
             new ConcurrentHashMap<>();
+    private final DeviceStreamPresenceCoordinator presenceCoordinator;
+
+    DeviceStreamConnectionRegistry(@Lazy DeviceStreamPresenceCoordinator presenceCoordinator) {
+        this.presenceCoordinator = presenceCoordinator;
+    }
 
     public void registerSession(DeviceStreamSession session) {
         if (session == null) {
@@ -28,8 +36,12 @@ public class DeviceStreamConnectionRegistry {
         String previous = serialBySession.put(session, normalized);
         if (previous != null && !previous.equals(normalized)) {
             bySerial.remove(previous, session);
+            presenceCoordinator.onSerialUnbound(previous);
         }
         bySerial.put(normalized, session);
+        if (previous == null || previous.isBlank()) {
+            presenceCoordinator.onSerialBound(normalized);
+        }
     }
 
     public void unregisterSession(DeviceStreamSession session) {
@@ -39,6 +51,7 @@ public class DeviceStreamConnectionRegistry {
         String serial = serialBySession.remove(session);
         if (serial != null && !serial.isBlank()) {
             bySerial.remove(serial, session);
+            presenceCoordinator.onSerialUnbound(serial);
         }
     }
 

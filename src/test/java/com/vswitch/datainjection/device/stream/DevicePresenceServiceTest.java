@@ -1,6 +1,8 @@
 package com.vswitch.datainjection.device.stream;
 
+import java.io.StringWriter;
 import java.time.Instant;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,7 +11,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.vswitch.datainjection.device.DeviceFacade;
+import com.vswitch.datainjection.DeviceStateRecord;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
@@ -19,24 +23,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DevicePresenceServiceTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    @Mock private DeviceStreamConnectionRegistry connectionRegistry;
 
     private DevicePresenceService presenceService;
 
     @BeforeEach
     void setUp() {
-        presenceService = new DevicePresenceService(liveUpdateBroadcaster);
+        presenceService = new DevicePresenceService(liveUpdateBroadcaster, connectionRegistry);
     }
 
     @Test
-    void firstPulseMarksDeviceOnlineAndBroadcasts() {
+    void markOnlineBroadcastsOnce() {
         Instant ts = Instant.now();
 
-        presenceService.recordPulse("tenant-1", "WM001", ts);
+        presenceService.markOnline("tenant-1", "WM001", ts);
 
         assertTrue(presenceService.isOnline("WM001"));
 
@@ -49,21 +55,21 @@ class DevicePresenceServiceTest {
     }
 
     @Test
-    void repeatedPulseDoesNotRebroadcastOnline() {
+    void repeatedMarkOnlineDoesNotRebroadcast() {
         Instant ts = Instant.now();
-        presenceService.recordPulse("tenant-1", "WM001", ts);
+        presenceService.markOnline("tenant-1", "WM001", ts);
         verify(liveUpdateBroadcaster).broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
 
-        presenceService.recordPulse("tenant-1", "WM001", ts.plusSeconds(1));
+        presenceService.markOnline("tenant-1", "WM001", ts.plusSeconds(1));
 
         verifyNoMoreInteractions(liveUpdateBroadcaster);
         assertTrue(presenceService.isOnline("WM001"));
     }
 
     @Test
-    void markOfflineBroadcastsOnceAndStaysOfflineDespiteRecentPulse() {
+    void markOfflineBroadcastsOnceAndStaysOffline() {
         Instant ts = Instant.now();
-        presenceService.recordPulse("tenant-1", "WM001", ts);
+        presenceService.markOnline("tenant-1", "WM001", ts);
         verify(liveUpdateBroadcaster).broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
 
         presenceService.markOffline("tenant-1", "WM001", ts.plusSeconds(1));
@@ -72,13 +78,13 @@ class DevicePresenceServiceTest {
         assertFalse(
                 presenceService.resolveIsOnline(
                         "WM001",
-                        java.util.Optional.of(
-                                new com.vswitch.datainjection.DeviceStateRecord(
+                        Optional.of(
+                                new DeviceStateRecord(
                                         "WM001",
                                         "tenant-1",
                                         0,
                                         0,
-                                        com.vswitch.datainjection.DeviceStateRecord.STATUS_FLOWING,
+                                        DeviceStateRecord.STATUS_FLOWING,
                                         100,
                                         100,
                                         100,
@@ -89,26 +95,44 @@ class DevicePresenceServiceTest {
         presenceService.markOffline("tenant-1", "WM001", ts.plusSeconds(2));
         org.mockito.Mockito.verify(liveUpdateBroadcaster, org.mockito.Mockito.times(2))
                 .broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
-        org.mockito.Mockito.verifyNoMoreInteractions(liveUpdateBroadcaster);
+        verifyNoMoreInteractions(liveUpdateBroadcaster);
     }
 
     @Test
-    void expireStaleDevicesMarksOfflineAndBroadcasts() {
-        Instant ts = Instant.now().minusSeconds(31);
-        presenceService.recordPulse("tenant-1", "WM001", ts);
+    void touchLastSeenDoesNotMarkOnline() {
+        Instant ts = Instant.now();
 
-        presenceService.expireStaleDevices();
+        presenceService.touchLastSeen("tenant-1", "WM001", ts);
 
         assertFalse(presenceService.isOnline("WM001"));
+        verifyNoMoreInteractions(liveUpdateBroadcaster);
+    }
 
-        ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
-        verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
-                .broadcast(eq("tenant-1"), captor.capture());
-        LiveUpdateMessage offlineMessage =
-                captor.getAllValues().stream()
-                        .filter(message -> "offline".equals(message.status()))
-                        .findFirst()
-                        .orElseThrow();
-        assertEquals("device_presence", offlineMessage.type());
+    @Test
+    void resolveIsOnlineUsesActiveSocketWhenPresenceCacheEmpty() {
+        when(connectionRegistry.findBySerial("WM001"))
+                .thenReturn(Optional.of(new DeviceStreamSession(new StringWriter())));
+
+        assertTrue(presenceService.resolveIsOnline("WM001", Optional.empty()));
+    }
+
+    @Test
+    void resolveIsOnlineUsesPersistedOfflineStatusWhenNoSocket() {
+        assertFalse(
+                presenceService.resolveIsOnline(
+                        "WM001",
+                        Optional.of(
+                                new DeviceStateRecord(
+                                        "WM001",
+                                        "tenant-1",
+                                        0,
+                                        0,
+                                        DeviceStateRecord.STATUS_OFFLINE,
+                                        100,
+                                        100,
+                                        100,
+                                        Instant.now().toString(),
+                                        "",
+                                        Instant.now().toString()))));
     }
 }

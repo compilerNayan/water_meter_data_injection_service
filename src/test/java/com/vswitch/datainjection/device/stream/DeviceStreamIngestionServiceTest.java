@@ -36,7 +36,12 @@ class DeviceStreamIngestionServiceTest {
     @BeforeEach
     void setUp() {
         store = new DeviceLiveTelemetryStore();
-        presenceService = new DevicePresenceService(liveUpdateBroadcaster);
+        presenceService =
+                new DevicePresenceService(
+                        liveUpdateBroadcaster,
+                        org.mockito.Mockito.mock(
+                                com.vswitch.datainjection.device.stream.command
+                                        .DeviceStreamConnectionRegistry.class));
         broadcastGate =
                 new WaterFlowLiveBroadcastGate(
                         liveUpdateBroadcaster,
@@ -95,9 +100,7 @@ class DeviceStreamIngestionServiceTest {
         verify(deviceFacade).touchHeartbeat("63tk0y1", "QJPDXN094", ts);
 
         assertTrue(store.find("QJPDXN094").isPresent());
-        ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
-        verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), captor.capture());
-        assertEquals(LiveUpdateMessage.TYPE_DEVICE_PRESENCE, captor.getValue().type());
+        verify(liveUpdateBroadcaster, never()).broadcast(eq("63tk0y1"), org.mockito.ArgumentMatchers.any());
 
         broadcastGate.flushNowForTests("QJPDXN094");
 

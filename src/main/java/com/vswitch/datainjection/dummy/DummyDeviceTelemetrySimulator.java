@@ -198,7 +198,7 @@ public class DummyDeviceTelemetrySimulator {
 
                     @Override
                     public void onDeviceCameOnline(String tenantId, String deviceId, Instant at) {
-                        devicePresenceService.recordPulse(tenantId, deviceId, at);
+                        devicePresenceService.markOnline(tenantId, deviceId, at);
                         log.debug("Dummy device back online {}/{}", tenantId, deviceId);
                     }
                 });

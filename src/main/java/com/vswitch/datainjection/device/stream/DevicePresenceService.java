@@ -1,6 +1,5 @@
 package com.vswitch.datainjection.device.stream;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -8,9 +7,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.vswitch.datainjection.DeviceStateRecord;
+import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
@@ -21,9 +21,13 @@ public class DevicePresenceService {
 
     private final Map<String, PresenceEntry> byDevice = new ConcurrentHashMap<>();
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
+    private final DeviceStreamConnectionRegistry connectionRegistry;
 
-    DevicePresenceService(TenantLiveUpdateBroadcaster liveUpdateBroadcaster) {
+    DevicePresenceService(
+            TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
+            DeviceStreamConnectionRegistry connectionRegistry) {
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
+        this.connectionRegistry = connectionRegistry;
     }
 
     public void markOffline(String tenantId, String deviceId, Instant at) {
@@ -44,7 +48,8 @@ public class DevicePresenceService {
         }
     }
 
-    public void recordPulse(String tenantId, String deviceId, Instant receivedAt) {
+    /** Socket connected — device is reachable regardless of water flow. */
+    public void markOnline(String tenantId, String deviceId, Instant at) {
         if (tenantId == null
                 || tenantId.isBlank()
                 || deviceId == null
@@ -55,11 +60,34 @@ public class DevicePresenceService {
         String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
         PresenceEntry previous = byDevice.get(key);
         boolean wasOnline = previous != null && previous.online();
-        byDevice.put(key, new PresenceEntry(tenantId, deviceId, receivedAt, true));
+        byDevice.put(key, new PresenceEntry(tenantId, deviceId, at, true));
 
         if (!wasOnline) {
-            broadcastPresence(tenantId, deviceId, true, receivedAt);
+            broadcastPresence(tenantId, deviceId, true, at);
         }
+    }
+
+    /** Updates last activity time only; does not affect online/offline. */
+    public void touchLastSeen(String tenantId, String deviceId, Instant receivedAt) {
+        if (tenantId == null
+                || tenantId.isBlank()
+                || deviceId == null
+                || deviceId.isBlank()) {
+            return;
+        }
+
+        String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
+        PresenceEntry previous = byDevice.get(key);
+        if (previous == null) {
+            return;
+        }
+        byDevice.put(
+                key,
+                new PresenceEntry(
+                        previous.tenantId(),
+                        previous.deviceId(),
+                        receivedAt,
+                        previous.online()));
     }
 
     public void clear(String deviceId) {
@@ -67,56 +95,28 @@ public class DevicePresenceService {
     }
 
     public boolean isOnline(String deviceId) {
-        PresenceEntry entry = byDevice.get(DeviceLiveTelemetryStore.normalizeDeviceId(deviceId));
-        if (entry == null) {
-            return false;
-        }
-        return entry.online() && !isStale(entry.lastSeenAt());
+        return resolveIsOnline(deviceId, Optional.empty());
     }
 
-    public boolean resolveIsOnline(String deviceId, java.util.Optional<com.vswitch.datainjection.DeviceStateRecord> state) {
+    public boolean resolveIsOnline(String deviceId, Optional<DeviceStateRecord> state) {
         String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
         PresenceEntry entry = byDevice.get(key);
         if (entry != null) {
-            return entry.online() && !isStale(entry.lastSeenAt());
+            return entry.online();
         }
-        return state.map(this::isStateOnline).orElse(false);
-    }
-
-    private boolean isStateOnline(com.vswitch.datainjection.DeviceStateRecord state) {
-        if (state.lastSeenAt() == null || state.lastSeenAt().isBlank()) {
-            return false;
+        if (connectionRegistry.findBySerial(key).isPresent()) {
+            return true;
         }
-        if (com.vswitch.datainjection.DeviceStateRecord.STATUS_OFFLINE.equals(state.status())) {
-            return false;
-        }
-        return !isStale(Instant.parse(state.lastSeenAt()));
+        return state
+                .map(
+                        deviceState ->
+                                !DeviceStateRecord.STATUS_OFFLINE.equals(deviceState.status()))
+                .orElse(false);
     }
 
     public Optional<Instant> lastSeenAt(String deviceId) {
         return Optional.ofNullable(byDevice.get(DeviceLiveTelemetryStore.normalizeDeviceId(deviceId)))
                 .map(PresenceEntry::lastSeenAt);
-    }
-
-    @Scheduled(fixedRate = 5_000)
-    void expireStaleDevices() {
-        Instant now = Instant.now();
-        for (Map.Entry<String, PresenceEntry> entry : byDevice.entrySet()) {
-            PresenceEntry current = entry.getValue();
-            if (!current.online()) {
-                continue;
-            }
-            if (!isStale(current.lastSeenAt())) {
-                continue;
-            }
-            byDevice.put(entry.getKey(), current.markOffline());
-            broadcastPresence(current.tenantId(), current.deviceId(), false, now);
-        }
-    }
-
-    private static boolean isStale(Instant lastSeenAt) {
-        return Duration.between(lastSeenAt, Instant.now()).compareTo(DevicePresenceThreshold.OFFLINE_AFTER)
-                > 0;
     }
 
     private void broadcastPresence(
@@ -136,10 +136,5 @@ public class DevicePresenceService {
     }
 
     private record PresenceEntry(
-            String tenantId, String deviceId, Instant lastSeenAt, boolean online) {
-
-        PresenceEntry markOffline() {
-            return new PresenceEntry(tenantId, deviceId, lastSeenAt, false);
-        }
-    }
+            String tenantId, String deviceId, Instant lastSeenAt, boolean online) {}
 }

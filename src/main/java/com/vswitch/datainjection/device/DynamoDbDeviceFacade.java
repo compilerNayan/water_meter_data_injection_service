@@ -1,6 +1,5 @@
 package com.vswitch.datainjection.device;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,13 +26,11 @@ import com.vswitch.datainjection.UnitRecord;
 import com.vswitch.datainjection.ValveStateResponse;
 import com.vswitch.datainjection.ValveUpdateRequest;
 import com.vswitch.datainjection.VolumeReadingService;
-import com.vswitch.datainjection.device.stream.DevicePresenceThreshold;
 
 @Service
 @ConditionalOnProperty(name = "mock.telemetry.enabled", havingValue = "false", matchIfMissing = true)
 public class DynamoDbDeviceFacade implements DeviceFacade {
 
-    private static final Duration OFFLINE_THRESHOLD = DevicePresenceThreshold.OFFLINE_AFTER;
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     protected final DeviceStore deviceStore;
@@ -472,8 +469,7 @@ public class DynamoDbDeviceFacade implements DeviceFacade {
         if (state.lastSeenAt() == null || state.lastSeenAt().isBlank()) {
             return DeviceStateRecord.STATUS_OFFLINE;
         }
-        Instant lastSeen = Instant.parse(state.lastSeenAt());
-        if (Duration.between(lastSeen, Instant.now()).compareTo(OFFLINE_THRESHOLD) > 0) {
+        if (DeviceStateRecord.STATUS_OFFLINE.equals(state.status())) {
             return DeviceStateRecord.STATUS_OFFLINE;
         }
         return state.status();
