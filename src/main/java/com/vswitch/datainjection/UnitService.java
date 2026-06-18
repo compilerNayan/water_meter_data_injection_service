@@ -295,7 +295,7 @@ public class UnitService {
                         .build());
     }
 
-    Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {
+    public Optional<UnitRecord> findByTenantAndDeviceId(String tenantId, String deviceId) {
         var response =
                 dynamoDbClient.query(
                         QueryRequest.builder()

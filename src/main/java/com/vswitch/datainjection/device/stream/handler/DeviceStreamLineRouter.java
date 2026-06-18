@@ -48,8 +48,11 @@ public class DeviceStreamLineRouter {
             case "enrollment_request" -> enrollmentRequestHandler.handle(envelope, session);
             case "lifecycle_enrolled" -> lifecycleEnrolledStreamHandler.handle(envelope);
             case "water_30m" -> waterThirtyMinuteStreamHandler.handle(envelope);
-            case "water_pulse", "log" -> {
-                // water_pulse handled in DeviceStreamTcpServer; log ignored for now
+            case "water_pulse" -> {
+                // water_pulse handled in DeviceStreamTcpServer
+            }
+            case "log" -> {
+                // log handled in DeviceStreamTcpServer
             }
             default -> log.debug("Unhandled stream category {} from {}", category, envelope.serialNumber());
         }

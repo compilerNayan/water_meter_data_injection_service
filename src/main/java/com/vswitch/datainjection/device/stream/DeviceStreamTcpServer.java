@@ -22,6 +22,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vswitch.datainjection.device.logs.DeviceLogStreamHandler;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.device.stream.handler.DeviceStreamLineRouter;
@@ -45,6 +46,7 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
     private final DeviceStreamIngestionService ingestionService;
     private final DeviceStreamConnectionRegistry connectionRegistry;
     private final DeviceStreamLineRouter lineRouter;
+    private final DeviceLogStreamHandler logStreamHandler;
     private final ObjectMapper objectMapper;
     private final int port;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -57,11 +59,13 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
             DeviceStreamIngestionService ingestionService,
             DeviceStreamConnectionRegistry connectionRegistry,
             DeviceStreamLineRouter lineRouter,
+            DeviceLogStreamHandler logStreamHandler,
             ObjectMapper objectMapper,
             @Value("${device.stream.port:9100}") int port) {
         this.ingestionService = ingestionService;
         this.connectionRegistry = connectionRegistry;
         this.lineRouter = lineRouter;
+        this.logStreamHandler = logStreamHandler;
         this.objectMapper = objectMapper;
         this.port = port;
     }
@@ -153,6 +157,12 @@ public class DeviceStreamTcpServer implements ApplicationRunner {
         if ("water_pulse".equals(envelope.category())) {
             bindSerial(envelope, session);
             handleWaterPulseEnvelope(envelope);
+            return;
+        }
+
+        if ("log".equals(envelope.category())) {
+            bindSerial(envelope, session);
+            logStreamHandler.handle(envelope);
             return;
         }
 
