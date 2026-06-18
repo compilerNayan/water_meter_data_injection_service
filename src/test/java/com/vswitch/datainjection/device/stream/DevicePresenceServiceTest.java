@@ -39,10 +39,10 @@ class DevicePresenceServiceTest {
     }
 
     @Test
-    void markOnlineBroadcastsOnce() {
+    void firstHeartbeatMarksDeviceOnlineAndBroadcasts() {
         Instant ts = Instant.now();
 
-        presenceService.markOnline("tenant-1", "WM001", ts);
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts);
 
         assertTrue(presenceService.isOnline("WM001"));
 
@@ -55,57 +55,49 @@ class DevicePresenceServiceTest {
     }
 
     @Test
-    void repeatedMarkOnlineDoesNotRebroadcast() {
+    void repeatedHeartbeatDoesNotRebroadcastOnline() {
         Instant ts = Instant.now();
-        presenceService.markOnline("tenant-1", "WM001", ts);
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts);
         verify(liveUpdateBroadcaster).broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
 
-        presenceService.markOnline("tenant-1", "WM001", ts.plusSeconds(1));
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts.plusSeconds(1));
 
         verifyNoMoreInteractions(liveUpdateBroadcaster);
         assertTrue(presenceService.isOnline("WM001"));
     }
 
     @Test
-    void markOfflineBroadcastsOnceAndStaysOffline() {
+    void markOfflineBroadcastsOnceAndStaysOfflineDespiteRecentHeartbeat() {
         Instant ts = Instant.now();
-        presenceService.markOnline("tenant-1", "WM001", ts);
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts);
         verify(liveUpdateBroadcaster).broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
 
         presenceService.markOffline("tenant-1", "WM001", ts.plusSeconds(1));
 
         assertFalse(presenceService.isOnline("WM001"));
-        assertFalse(
-                presenceService.resolveIsOnline(
-                        "WM001",
-                        Optional.of(
-                                new DeviceStateRecord(
-                                        "WM001",
-                                        "tenant-1",
-                                        0,
-                                        0,
-                                        DeviceStateRecord.STATUS_FLOWING,
-                                        100,
-                                        100,
-                                        100,
-                                        ts.toString(),
-                                        "",
-                                        ts.toString()))));
 
-        presenceService.markOffline("tenant-1", "WM001", ts.plusSeconds(2));
-        org.mockito.Mockito.verify(liveUpdateBroadcaster, org.mockito.Mockito.times(2))
-                .broadcast(eq("tenant-1"), org.mockito.ArgumentMatchers.any());
-        verifyNoMoreInteractions(liveUpdateBroadcaster);
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts.plusSeconds(2));
+        assertTrue(presenceService.isOnline("WM001"));
     }
 
     @Test
-    void touchLastSeenDoesNotMarkOnline() {
-        Instant ts = Instant.now();
+    void expireStaleHeartbeatsMarksOfflineAndBroadcasts() {
+        Instant ts = Instant.now().minusSeconds(6);
+        presenceService.recordHeartbeat("tenant-1", "WM001", ts);
 
-        presenceService.touchLastSeen("tenant-1", "WM001", ts);
+        presenceService.expireStaleHeartbeats();
 
         assertFalse(presenceService.isOnline("WM001"));
-        verifyNoMoreInteractions(liveUpdateBroadcaster);
+
+        ArgumentCaptor<LiveUpdateMessage> captor = ArgumentCaptor.forClass(LiveUpdateMessage.class);
+        verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
+                .broadcast(eq("tenant-1"), captor.capture());
+        LiveUpdateMessage offlineMessage =
+                captor.getAllValues().stream()
+                        .filter(message -> "offline".equals(message.status()))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals("device_presence", offlineMessage.type());
     }
 
     @Test

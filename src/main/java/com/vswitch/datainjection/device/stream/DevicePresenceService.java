@@ -1,5 +1,6 @@
 package com.vswitch.datainjection.device.stream;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -7,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.vswitch.datainjection.DeviceStateRecord;
@@ -40,16 +42,23 @@ public class DevicePresenceService {
 
         String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
         PresenceEntry previous = byDevice.get(key);
-        boolean wasOnline = previous == null || previous.online();
-        Instant lastSeen = previous != null ? previous.lastSeenAt() : at;
+        boolean wasOnline = previous != null && isEntryOnline(previous);
+        Instant lastSeen = previous != null ? previous.lastHeartbeatAt() : at;
         byDevice.put(key, new PresenceEntry(tenantId, deviceId, lastSeen, false));
         if (wasOnline) {
             broadcastPresence(tenantId, deviceId, false, at);
         }
     }
 
-    /** Socket connected — device is reachable regardless of water flow. */
+    /** Socket connected — optimistic online until heartbeat timeout applies. */
     public void markOnline(String tenantId, String deviceId, Instant at) {
+        recordHeartbeat(tenantId, deviceId, at);
+    }
+
+    /**
+     * 1s device heartbeat (water_pulse with ml=0 allowed). Refreshes presence only — not persisted.
+     */
+    public void recordHeartbeat(String tenantId, String deviceId, Instant at) {
         if (tenantId == null
                 || tenantId.isBlank()
                 || deviceId == null
@@ -59,35 +68,12 @@ public class DevicePresenceService {
 
         String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
         PresenceEntry previous = byDevice.get(key);
-        boolean wasOnline = previous != null && previous.online();
+        boolean wasOnline = previous != null && isEntryOnline(previous);
         byDevice.put(key, new PresenceEntry(tenantId, deviceId, at, true));
 
         if (!wasOnline) {
             broadcastPresence(tenantId, deviceId, true, at);
         }
-    }
-
-    /** Updates last activity time only; does not affect online/offline. */
-    public void touchLastSeen(String tenantId, String deviceId, Instant receivedAt) {
-        if (tenantId == null
-                || tenantId.isBlank()
-                || deviceId == null
-                || deviceId.isBlank()) {
-            return;
-        }
-
-        String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
-        PresenceEntry previous = byDevice.get(key);
-        if (previous == null) {
-            return;
-        }
-        byDevice.put(
-                key,
-                new PresenceEntry(
-                        previous.tenantId(),
-                        previous.deviceId(),
-                        receivedAt,
-                        previous.online()));
     }
 
     public void clear(String deviceId) {
@@ -102,7 +88,7 @@ public class DevicePresenceService {
         String key = DeviceLiveTelemetryStore.normalizeDeviceId(deviceId);
         PresenceEntry entry = byDevice.get(key);
         if (entry != null) {
-            return entry.online();
+            return isEntryOnline(entry);
         }
         if (connectionRegistry.findBySerial(key).isPresent()) {
             return true;
@@ -116,7 +102,33 @@ public class DevicePresenceService {
 
     public Optional<Instant> lastSeenAt(String deviceId) {
         return Optional.ofNullable(byDevice.get(DeviceLiveTelemetryStore.normalizeDeviceId(deviceId)))
-                .map(PresenceEntry::lastSeenAt);
+                .map(PresenceEntry::lastHeartbeatAt);
+    }
+
+    @Scheduled(fixedRate = 2_000)
+    void expireStaleHeartbeats() {
+        Instant now = Instant.now();
+        for (Map.Entry<String, PresenceEntry> entry : byDevice.entrySet()) {
+            PresenceEntry current = entry.getValue();
+            if (!current.online()) {
+                continue;
+            }
+            if (!isStale(current.lastHeartbeatAt())) {
+                continue;
+            }
+            byDevice.put(entry.getKey(), current.markOffline());
+            broadcastPresence(current.tenantId(), current.deviceId(), false, now);
+        }
+    }
+
+    private static boolean isEntryOnline(PresenceEntry entry) {
+        return entry.online() && !isStale(entry.lastHeartbeatAt());
+    }
+
+    private static boolean isStale(Instant lastHeartbeatAt) {
+        return Duration.between(lastHeartbeatAt, Instant.now())
+                        .compareTo(DevicePresenceThreshold.OFFLINE_AFTER)
+                > 0;
     }
 
     private void broadcastPresence(
@@ -136,5 +148,10 @@ public class DevicePresenceService {
     }
 
     private record PresenceEntry(
-            String tenantId, String deviceId, Instant lastSeenAt, boolean online) {}
+            String tenantId, String deviceId, Instant lastHeartbeatAt, boolean online) {
+
+        PresenceEntry markOffline() {
+            return new PresenceEntry(tenantId, deviceId, lastHeartbeatAt, false);
+        }
+    }
 }

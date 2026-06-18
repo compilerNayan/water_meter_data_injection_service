@@ -85,7 +85,7 @@ class DeviceStreamIngestionServiceTest {
     }
 
     @Test
-    void storesPulseWithoutBroadcastingWaterFlowWhenMlZero() {
+    void storesHeartbeatWithoutPersistingOrBroadcastingWaterFlowWhenMlZero() {
         Instant ts = Instant.parse("2026-06-13T10:00:05Z");
         service.ingestPulse(
                 DeviceStreamPulsePayload.from(
@@ -97,23 +97,15 @@ class DeviceStreamIngestionServiceTest {
                         120.0,
                         15.5));
 
-        verify(deviceFacade).touchHeartbeat("63tk0y1", "QJPDXN094", ts);
-
-        assertTrue(store.find("QJPDXN094").isPresent());
-        verify(liveUpdateBroadcaster, never()).broadcast(eq("63tk0y1"), org.mockito.ArgumentMatchers.any());
+        verify(liveUpdateBroadcaster).broadcast(eq("63tk0y1"), org.mockito.ArgumentMatchers.any());
+        verify(deviceFacade, never()).touchHeartbeat(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(deviceFacade, never()).ingestSecondPulse(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble());
+        assertTrue(store.find("QJPDXN094").isEmpty());
 
         broadcastGate.flushNowForTests("QJPDXN094");
 
-        verify(liveUpdateBroadcaster, org.mockito.Mockito.atLeastOnce())
-                .broadcast(
-                        eq("63tk0y1"),
-                        org.mockito.ArgumentMatchers.argThat(
-                                message ->
-                                        LiveUpdateMessage.TYPE_WATER_FLOW_TICK.equals(
-                                                message.type())
-                                                && message.devices().get(0).ml() == 0
-                                                && message.devices().get(0).todayLiters()
-                                                        == 15.5));
+        verify(liveUpdateBroadcaster, org.mockito.Mockito.atMostOnce())
+                .broadcast(eq("63tk0y1"), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

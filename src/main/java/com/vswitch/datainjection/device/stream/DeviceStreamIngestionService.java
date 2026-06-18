@@ -32,8 +32,14 @@ public class DeviceStreamIngestionService {
     public void ingestPulse(DeviceStreamPulsePayload payload) {
         validate(payload);
 
-        double flowRateLpm = payload.ml() / 1000.0 * 60.0;
         Instant receivedAt = Instant.now();
+        presenceService.recordHeartbeat(payload.tenantId(), payload.deviceId(), receivedAt);
+
+        if (payload.ml() <= 0) {
+            return;
+        }
+
+        double flowRateLpm = payload.ml() / 1000.0 * 60.0;
         DeviceLiveTelemetrySnapshot snapshot =
                 new DeviceLiveTelemetrySnapshot(
                         payload.tenantId(),
@@ -46,19 +52,13 @@ public class DeviceStreamIngestionService {
                         receivedAt);
         liveTelemetryStore.put(snapshot);
         persistPulse(payload);
-        presenceService.touchLastSeen(payload.tenantId(), payload.deviceId(), receivedAt);
         waterFlowBroadcastGate.offer(payload, flowRateLpm);
     }
 
     private void persistPulse(DeviceStreamPulsePayload payload) {
         try {
-            if (payload.ml() > 0) {
-                deviceFacade.ingestSecondPulse(
-                        payload.tenantId(), payload.deviceId(), payload.ts(), payload.ml());
-            } else {
-                deviceFacade.touchHeartbeat(
-                        payload.tenantId(), payload.deviceId(), payload.ts());
-            }
+            deviceFacade.ingestSecondPulse(
+                    payload.tenantId(), payload.deviceId(), payload.ts(), payload.ml());
         } catch (Exception e) {
             log.debug(
                     "Failed to persist stream pulse for {}/{}",

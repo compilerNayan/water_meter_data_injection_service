@@ -38,15 +38,6 @@ public class DeviceStreamPresenceCoordinator {
                         identity -> {
                             Instant now = Instant.now();
                             presenceService.markOnline(identity.tenantId(), identity.deviceId(), now);
-                            try {
-                                deviceFacade.touchHeartbeat(identity.tenantId(), identity.deviceId(), now);
-                            } catch (Exception e) {
-                                log.debug(
-                                        "Failed to touch heartbeat on socket connect for {}/{}",
-                                        identity.tenantId(),
-                                        identity.deviceId(),
-                                        e);
-                            }
                             log.info(
                                     "Device stream online {}/{} (serial bound)",
                                     identity.tenantId(),
