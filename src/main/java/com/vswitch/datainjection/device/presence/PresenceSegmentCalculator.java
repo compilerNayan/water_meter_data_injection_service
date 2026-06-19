@@ -25,7 +25,8 @@ public final class PresenceSegmentCalculator {
             String date,
             List<PresenceSegment> segments,
             long onlineSeconds,
-            long offlineSeconds) {}
+            long offlineSeconds,
+            long bootCount) {}
 
     public static List<DayPresenceActivity> computeDays(
             ZoneId zone,
@@ -61,6 +62,17 @@ public final class PresenceSegmentCalculator {
 
             for (PresenceTransitionRecord event : dayEvents) {
                 Instant eventAt = event.eventInstant();
+                if (event.isBoot()) {
+                    if (eventAt.isAfter(cursor) && cursor.isBefore(effectiveEnd)) {
+                        Instant segmentEnd = eventAt.isBefore(effectiveEnd) ? eventAt : effectiveEnd;
+                        if (segmentEnd.isAfter(cursor)) {
+                            segments.add(toSegment(zone, currentOnline, cursor, segmentEnd));
+                        }
+                    }
+                    segments.add(toBootMarker(zone, eventAt));
+                    cursor = eventAt.isAfter(cursor) ? eventAt : cursor;
+                    continue;
+                }
                 if (eventAt.isAfter(cursor) && cursor.isBefore(effectiveEnd)) {
                     Instant segmentEnd = eventAt.isBefore(effectiveEnd) ? eventAt : effectiveEnd;
                     if (segmentEnd.isAfter(cursor)) {
@@ -78,11 +90,14 @@ public final class PresenceSegmentCalculator {
 
             long onlineSeconds = 0;
             long offlineSeconds = 0;
+            long bootCount = 0;
             for (PresenceSegment segment : segments) {
                 if (PresenceTransitionRecord.STATUS_ONLINE.equals(segment.status())) {
                     onlineSeconds += segment.durationSeconds();
-                } else {
+                } else if (PresenceTransitionRecord.STATUS_OFFLINE.equals(segment.status())) {
                     offlineSeconds += segment.durationSeconds();
+                } else if (PresenceTransitionRecord.STATUS_BOOT.equals(segment.status())) {
+                    bootCount++;
                 }
             }
 
@@ -91,7 +106,8 @@ public final class PresenceSegmentCalculator {
                             date.format(DATE_FORMAT),
                             List.copyOf(segments),
                             onlineSeconds,
-                            offlineSeconds));
+                            offlineSeconds,
+                            bootCount));
         }
         return days;
     }
@@ -100,18 +116,28 @@ public final class PresenceSegmentCalculator {
             Instant instant,
             Optional<PresenceTransitionRecord> lastBeforeRange,
             List<PresenceTransitionRecord> sortedEvents) {
-        Optional<PresenceTransitionRecord> prior = Optional.empty();
+        Optional<PresenceTransitionRecord> lastStateEvent = Optional.empty();
+        if (lastBeforeRange.isPresent()
+                && lastBeforeRange.get().eventInstant().isBefore(instant)
+                && !lastBeforeRange.get().isBoot()) {
+            lastStateEvent = lastBeforeRange;
+        }
         for (PresenceTransitionRecord event : sortedEvents) {
             if (event.eventInstant().isBefore(instant)) {
-                prior = Optional.of(event);
+                if (!event.isBoot()) {
+                    lastStateEvent = Optional.of(event);
+                }
             } else {
                 break;
             }
         }
-        if (prior.isEmpty()) {
-            prior = lastBeforeRange;
-        }
-        return prior.map(PresenceTransitionRecord::isOnline).orElse(false);
+        return lastStateEvent.map(PresenceTransitionRecord::isOnline).orElse(false);
+    }
+
+    private static PresenceSegment toBootMarker(ZoneId zone, Instant at) {
+        String formatted = formatInstant(zone, at);
+        return new PresenceSegment(
+                PresenceTransitionRecord.STATUS_BOOT, formatted, formatted, 0);
     }
 
     private static PresenceSegment toSegment(

@@ -15,10 +15,12 @@ public record PresenceTransitionRecord(
 
     public static final String STATUS_ONLINE = "online";
     public static final String STATUS_OFFLINE = "offline";
+    public static final String STATUS_BOOT = "boot";
 
     public static final String SOURCE_HEARTBEAT = "heartbeat";
     public static final String SOURCE_SOCKET = "socket";
     public static final String SOURCE_TIMEOUT = "timeout";
+    public static final String SOURCE_DEVICE_BOOT = "device_boot";
 
     public Instant eventInstant() {
         return Instant.parse(eventAt);
@@ -26,6 +28,10 @@ public record PresenceTransitionRecord(
 
     public boolean isOnline() {
         return STATUS_ONLINE.equals(status);
+    }
+
+    public boolean isBoot() {
+        return STATUS_BOOT.equals(status);
     }
 
     public static String formatEventAt(Instant instant) {

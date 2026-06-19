@@ -52,4 +52,19 @@ class PresenceHistoryServiceTest {
         assertEquals(PresenceTransitionRecord.STATUS_OFFLINE, captor.getValue().status());
         assertEquals(PresenceTransitionRecord.SOURCE_TIMEOUT, captor.getValue().source());
     }
+
+    @Test
+    void recordBootPersistsTransition() {
+        Instant at = Instant.parse("2026-06-12T10:00:00Z");
+
+        service.recordBoot("tenant-1", "wm001", at);
+
+        ArgumentCaptor<PresenceTransitionRecord> captor =
+                ArgumentCaptor.forClass(PresenceTransitionRecord.class);
+        verify(store).putEvent(captor.capture());
+        PresenceTransitionRecord record = captor.getValue();
+        assertEquals("WM001", record.deviceId());
+        assertEquals(PresenceTransitionRecord.STATUS_BOOT, record.status());
+        assertEquals(PresenceTransitionRecord.SOURCE_DEVICE_BOOT, record.source());
+    }
 }

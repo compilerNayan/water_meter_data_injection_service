@@ -33,6 +33,15 @@ public class PresenceHistoryService {
         persistTransition(tenantId, deviceId, at, PresenceTransitionRecord.STATUS_OFFLINE, source);
     }
 
+    public void recordBoot(String tenantId, String deviceId, Instant at) {
+        persistTransition(
+                tenantId,
+                deviceId,
+                at,
+                PresenceTransitionRecord.STATUS_BOOT,
+                PresenceTransitionRecord.SOURCE_DEVICE_BOOT);
+    }
+
     private void persistTransition(
             String tenantId, String deviceId, Instant at, String status, String source) {
         if (tenantId == null
