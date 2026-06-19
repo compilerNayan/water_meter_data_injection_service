@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.vswitch.datainjection.DeviceStateRecord;
+import com.vswitch.datainjection.device.presence.PresenceHistoryService;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamSession;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
@@ -30,12 +31,15 @@ class DevicePresenceServiceTest {
 
     @Mock private TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
     @Mock private DeviceStreamConnectionRegistry connectionRegistry;
+    @Mock private PresenceHistoryService presenceHistoryService;
 
     private DevicePresenceService presenceService;
 
     @BeforeEach
     void setUp() {
-        presenceService = new DevicePresenceService(liveUpdateBroadcaster, connectionRegistry);
+        presenceService =
+                new DevicePresenceService(
+                        liveUpdateBroadcaster, connectionRegistry, presenceHistoryService);
     }
 
     @Test

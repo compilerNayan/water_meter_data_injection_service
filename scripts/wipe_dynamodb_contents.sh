@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# Delete ALL items from Water Meter DynamoDB tables (tables are kept).
+# Delete ALL items from Water Meter DynamoDB tables (tables are kept)
+# and delete ALL users from the Cognito user pool.
 # Requires: aws cli, jq
 #
 # Usage:
 #   ./scripts/wipe_dynamodb_contents.sh              # interactive confirm
 #   ./scripts/wipe_dynamodb_contents.sh --yes      # skip confirm
+#   bash ./scripts/wipe_dynamodb_contents.sh --yes # explicit bash (required; do not use sh)
 #   AWS_REGION=ap-south-1 AWS_PROFILE=myprofile ./scripts/wipe_dynamodb_contents.sh --yes
+#   COGNITO_USER_POOL_ID=ap-south-1_xxxxx ./scripts/wipe_dynamodb_contents.sh --yes
 #
 set -euo pipefail
 
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  exec /usr/bin/env bash "$0" "$@"
+fi
+
 REGION="${AWS_REGION:-ap-south-1}"
 PROFILE="${AWS_PROFILE:-}"
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-ap-south-1_vm19Xv95r}"
 AUTO_YES=false
 
 for arg in "$@"; do
@@ -52,6 +60,7 @@ TABLE_SPECS=(
   "WaterMeterTodaySlots:deviceId:slotKey"
   "WaterMeterDayHistory:deviceId:dayKey"
   "WaterMeterDeviceConfig:deviceId"
+  "WaterMeterDevicePresenceEvents:deviceId:eventAt"
   "WaterMeterDummyDevices:deviceKey"
   "TestTable:test_id"
 )
@@ -169,6 +178,62 @@ wipe_table() {
   echo "DONE  $table_name ($deleted items deleted)"
 }
 
+wipe_cognito_users() {
+  local user_pool_id="$1"
+
+  if [[ -z "$user_pool_id" ]]; then
+    echo "SKIP  Cognito (COGNITO_USER_POOL_ID is empty)" >&2
+    return 0
+  fi
+
+  if ! aws cognito-idp describe-user-pool "${aws_args[@]}" \
+      --user-pool-id "$user_pool_id" >/dev/null 2>&1; then
+    echo "SKIP  Cognito user pool $user_pool_id (not found or no access)"
+    return 0
+  fi
+
+  echo "WIPE  Cognito user pool $user_pool_id"
+
+  local deleted=0
+  local pagination_token=""
+
+  while true; do
+    local list_cmd=(
+      aws cognito-idp list-users
+      "${aws_args[@]}"
+      --user-pool-id "$user_pool_id"
+      --output json
+    )
+    if [[ -n "$pagination_token" ]]; then
+      list_cmd+=(--pagination-token "$pagination_token")
+    fi
+
+    local list_out
+    list_out=$("${list_cmd[@]}")
+
+    local tmp_usernames
+    tmp_usernames=$(mktemp)
+    echo "$list_out" | jq -r '.Users[]?.Username // empty' >"$tmp_usernames"
+
+    while IFS= read -r username; do
+      [[ -z "$username" ]] && continue
+      aws cognito-idp admin-delete-user "${aws_args[@]}" \
+        --user-pool-id "$user_pool_id" \
+        --username "$username" >/dev/null
+      deleted=$((deleted + 1))
+      echo "  deleted $username"
+    done <"$tmp_usernames"
+    rm -f "$tmp_usernames"
+
+    pagination_token=$(echo "$list_out" | jq -r '.PaginationToken // empty')
+    if [[ -z "$pagination_token" ]]; then
+      break
+    fi
+  done
+
+  echo "DONE  Cognito user pool ($deleted users deleted)"
+}
+
 echo "Region:  $REGION"
 if [[ -n "$PROFILE" ]]; then
   echo "Profile: $PROFILE"
@@ -178,6 +243,9 @@ echo "This will DELETE ALL ROWS from these tables (tables are NOT dropped):"
 for spec in "${TABLE_SPECS[@]}"; do
   echo "  - ${spec%%:*}"
 done
+echo ""
+echo "And DELETE ALL USERS from Cognito user pool:"
+echo "  - $COGNITO_USER_POOL_ID"
 echo ""
 
 if [[ "$AUTO_YES" != true ]]; then
@@ -194,4 +262,7 @@ for spec in "${TABLE_SPECS[@]}"; do
 done
 
 echo ""
-echo "All requested table contents wiped."
+wipe_cognito_users "$COGNITO_USER_POOL_ID"
+
+echo ""
+echo "All requested table contents and Cognito users wiped."

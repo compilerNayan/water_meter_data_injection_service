@@ -131,6 +131,17 @@ If you already created `WaterMeterDynamoDbAccess` earlier, **edit** that inline 
 3. **Partition key:** `deviceKey` (String)
 4. Create the table (on-demand billing is fine)
 
+### Step 7b2 — Device presence events (online/offline history)
+
+1. Go to **DynamoDB → Tables → Create table**
+2. **Table name:** `WaterMeterDevicePresenceEvents`
+3. **Partition key:** `deviceId` (String)
+4. **Sort key:** `eventAt` (String) — UTC ISO-8601 instant, e.g. `2026-06-12T18:20:10.123Z`
+5. Create the table (on-demand billing is fine)
+6. **Additional settings → Time to Live (TTL):** enable attribute `expiresAt` (Number, Unix epoch seconds)
+
+Items store `tenantId`, `status` (`online` / `offline`), `source` (`heartbeat`, `socket`, `timeout`), and `expiresAt` (365 days after the event).
+
 ### Step 7c — Cognito permissions (for tenant wipe / delete user)
 
 On the same `aws-elasticbeanstalk-ec2-role`, add another inline policy (or extend the existing one):

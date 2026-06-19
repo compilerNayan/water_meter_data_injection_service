@@ -12,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.vswitch.datainjection.device.presence.PresenceHistoryService;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
 
@@ -41,7 +42,8 @@ class DeviceStreamIngestionServiceTest {
                         liveUpdateBroadcaster,
                         org.mockito.Mockito.mock(
                                 com.vswitch.datainjection.device.stream.command
-                                        .DeviceStreamConnectionRegistry.class));
+                                        .DeviceStreamConnectionRegistry.class),
+                        org.mockito.Mockito.mock(PresenceHistoryService.class));
         broadcastGate =
                 new WaterFlowLiveBroadcastGate(
                         liveUpdateBroadcaster,

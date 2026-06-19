@@ -12,6 +12,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.vswitch.datainjection.DeviceStateRecord;
+import com.vswitch.datainjection.device.presence.PresenceHistoryService;
+import com.vswitch.datainjection.device.presence.PresenceTransitionRecord;
 import com.vswitch.datainjection.device.stream.command.DeviceStreamConnectionRegistry;
 import com.vswitch.datainjection.live.LiveUpdateMessage;
 import com.vswitch.datainjection.live.TenantLiveUpdateBroadcaster;
@@ -24,12 +26,15 @@ public class DevicePresenceService {
     private final Map<String, PresenceEntry> byDevice = new ConcurrentHashMap<>();
     private final TenantLiveUpdateBroadcaster liveUpdateBroadcaster;
     private final DeviceStreamConnectionRegistry connectionRegistry;
+    private final PresenceHistoryService presenceHistoryService;
 
     DevicePresenceService(
             TenantLiveUpdateBroadcaster liveUpdateBroadcaster,
-            DeviceStreamConnectionRegistry connectionRegistry) {
+            DeviceStreamConnectionRegistry connectionRegistry,
+            PresenceHistoryService presenceHistoryService) {
         this.liveUpdateBroadcaster = liveUpdateBroadcaster;
         this.connectionRegistry = connectionRegistry;
+        this.presenceHistoryService = presenceHistoryService;
     }
 
     public void markOffline(String tenantId, String deviceId, Instant at) {
@@ -46,7 +51,8 @@ public class DevicePresenceService {
         Instant lastSeen = previous != null ? previous.lastHeartbeatAt() : at;
         byDevice.put(key, new PresenceEntry(tenantId, deviceId, lastSeen, false));
         if (wasOnline) {
-            broadcastPresence(tenantId, deviceId, false, at);
+            onPresenceTransition(
+                    tenantId, deviceId, false, at, PresenceTransitionRecord.SOURCE_SOCKET);
         }
     }
 
@@ -72,7 +78,8 @@ public class DevicePresenceService {
         byDevice.put(key, new PresenceEntry(tenantId, deviceId, at, true));
 
         if (!wasOnline) {
-            broadcastPresence(tenantId, deviceId, true, at);
+            onPresenceTransition(
+                    tenantId, deviceId, true, at, PresenceTransitionRecord.SOURCE_HEARTBEAT);
         }
     }
 
@@ -117,7 +124,12 @@ public class DevicePresenceService {
                 continue;
             }
             byDevice.put(entry.getKey(), current.markOffline());
-            broadcastPresence(current.tenantId(), current.deviceId(), false, now);
+            onPresenceTransition(
+                    current.tenantId(),
+                    current.deviceId(),
+                    false,
+                    now,
+                    PresenceTransitionRecord.SOURCE_TIMEOUT);
         }
     }
 
@@ -129,6 +141,16 @@ public class DevicePresenceService {
         return Duration.between(lastHeartbeatAt, Instant.now())
                         .compareTo(DevicePresenceThreshold.OFFLINE_AFTER)
                 > 0;
+    }
+
+    private void onPresenceTransition(
+            String tenantId, String deviceId, boolean online, Instant ts, String source) {
+        broadcastPresence(tenantId, deviceId, online, ts);
+        if (online) {
+            presenceHistoryService.recordOnline(tenantId, deviceId, ts, source);
+        } else {
+            presenceHistoryService.recordOffline(tenantId, deviceId, ts, source);
+        }
     }
 
     private void broadcastPresence(

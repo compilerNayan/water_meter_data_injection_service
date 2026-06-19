@@ -28,7 +28,7 @@ public class DeviceLiveTelemetryStore {
         return latestByDevice.size();
     }
 
-    static String normalizeDeviceId(String deviceId) {
+    public static String normalizeDeviceId(String deviceId) {
         if (deviceId == null) {
             return "";
         }
